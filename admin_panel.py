@@ -4,8 +4,7 @@ import subprocess
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QVBoxLayout, QHBoxLayout, QGridLayout, QFileDialog, QFrame, 
-    QLineEdit, QComboBox, QListWidget, QTextEdit, QSizePolicy,
-    QScrollArea
+    QLineEdit, QComboBox, QListWidget, QTextEdit, QScrollArea
 )
 from PyQt6.QtCore import Qt, QTimer, QTime, QDate, QPointF
 from PyQt6.QtGui import QFont, QPainter, QLinearGradient, QColor, QPainterPath
@@ -67,6 +66,10 @@ class AdminPanel(QMainWindow):
         self.setWindowTitle("SOS HGS Gandaki - Admin Panel")
         self.setMinimumSize(1000, 680)
         self.resize(1200, 800)
+
+        # State Variables
+        self.selected_pdf_path = None
+
         self.init_ui()
 
     def init_ui(self):
@@ -286,7 +289,6 @@ class AdminPanel(QMainWindow):
         notices_title.setStyleSheet("color: #0369A1; border: none; background: transparent;")
         outer_notices_layout.addWidget(notices_title)
 
-        # Scroll Area Setup
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
@@ -490,6 +492,7 @@ class AdminPanel(QMainWindow):
                 border-color: #0284C7;
             }
         """)
+        rec_search.textChanged.connect(self.filter_recent_notices)
         rec_top_layout.addWidget(rec_search)
         recent_layout.addLayout(rec_top_layout)
 
@@ -591,8 +594,8 @@ class AdminPanel(QMainWindow):
             has_senior = True
         else:
             try:
-                start = int(self.start_grade_combo.currentText())
-                end = int(self.end_grade_combo.currentText())
+                start = int(self.start_grade_combo.currentText() or 6)
+                end = int(self.end_grade_combo.currentText() or 12)
                 has_senior = (start >= 11 or end >= 11)
             except ValueError:
                 has_senior = True
@@ -609,7 +612,10 @@ class AdminPanel(QMainWindow):
             self.notice_section_combo.setCurrentText(current_sec)
 
     def update_dependent_dropdowns(self):
-        selected_class = int(self.class_combo.currentText())
+        try:
+            selected_class = int(self.class_combo.currentText())
+        except ValueError:
+            selected_class = 6
 
         self.section_combo.clear()
         if selected_class <= 10:
@@ -655,6 +661,12 @@ class AdminPanel(QMainWindow):
         layout.addWidget(container)
         return field
 
+    def filter_recent_notices(self, text):
+        query = text.strip().lower()
+        for i in range(self.recent_notices_list.count()):
+            item = self.recent_notices_list.item(i)
+            item.setHidden(query not in item.text().lower())
+
     def update_clock(self):
         current_time = QTime.currentTime().toString("hh:mm:ss AP")
         current_date = QDate.currentDate().toString("dddd, d MMMM yyyy")
@@ -665,7 +677,7 @@ class AdminPanel(QMainWindow):
             self, "Select PDF Document", "", "PDF Files (*.pdf)"
         )
         if file_name:
-            short_name = file_name.split("/")[-1].split("\\")[-1]
+            short_name = os.path.basename(file_name)
             self.file_label.setText(f"PDF: {short_name}")
             self.selected_pdf_path = short_name
 
@@ -692,13 +704,13 @@ class AdminPanel(QMainWindow):
             target_tag += f" ({section})"
 
         notice_display = f"• [{target_tag}] {title_text}"
-        if hasattr(self, 'selected_pdf_path') and self.selected_pdf_path:
+        if self.selected_pdf_path:
             notice_display += f" [PDF: {self.selected_pdf_path}]"
 
         self.recent_notices_list.insertItem(0, notice_display)
 
-        if self.recent_notices_list.count() > 4:
-            self.recent_notices_list.takeItem(4)
+        if self.recent_notices_list.count() > 10:
+            self.recent_notices_list.takeItem(10)
 
         self.notice_title_input.clear()
         self.notice_content_input.clear()
