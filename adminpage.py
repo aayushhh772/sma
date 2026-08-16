@@ -1,5 +1,7 @@
 import sys
 import os
+import random
+import math
 import subprocess
 
 from PyQt6.QtWidgets import (
@@ -14,8 +16,8 @@ from PyQt6.QtWidgets import (
     QFrame,
     QMessageBox,
 )
-from PyQt6.QtCore import Qt, QPointF
-from PyQt6.QtGui import QFont, QPixmap, QPainter, QLinearGradient, QColor, QPainterPath
+from PyQt6.QtCore import Qt, QPointF, QTimer
+from PyQt6.QtGui import QFont, QPixmap, QPainter, QLinearGradient, QRadialGradient, QColor, QPainterPath
 
 
 def get_logo_widget(height=85):
@@ -46,57 +48,150 @@ def get_logo_widget(height=85):
     return logo_label
 
 
-class WaveBackgroundWidget(QWidget):
+class Bubble:
+    def __init__(self, bounds_width, bounds_height):
+        self.reset(bounds_width, bounds_height, random_y=True)
+
+    def reset(self, bounds_width, bounds_height, random_y=False):
+        self.radius = random.uniform(6, 22)
+        self.x = random.uniform(self.radius, max(bounds_width - self.radius, self.radius + 1))
+        self.y = random.uniform(0, bounds_height) if random_y else bounds_height + self.radius + random.uniform(0, 50)
+        self.speed = random.uniform(0.4, 1.2)
+        self.wobble_speed = random.uniform(0.02, 0.05)
+        self.wobble_amplitude = random.uniform(0.5, 1.5)
+        self.alpha = random.randint(30, 90)
+        self.phase = random.uniform(0, 2 * math.pi)
+
+    def update(self, bounds_width, bounds_height):
+        self.y -= self.speed
+        self.phase += self.wobble_speed
+        self.x += math.sin(self.phase) * self.wobble_amplitude
+        
+        if self.y < -self.radius * 2:
+            self.reset(bounds_width, bounds_height, random_y=False)
+
+
+class AnimatedWaveBackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.wave_phase = 0.0
+        
+        # Create persistent floating bubbles
+        self.bubbles = []
+        self.init_bubbles(25)
+        
+        # 60 FPS Animation Timer (~16ms)
+        self.animation_timer = QTimer(self)
+        self.animation_timer.timeout.connect(self.update_animation)
+        self.animation_timer.start(16)
+
+    def init_bubbles(self, count):
+        w = max(self.width(), 800)
+        h = max(self.height(), 600)
+        self.bubbles = [Bubble(w, h) for _ in range(count)]
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Adjust bubble positions if window bounds change significantly
+        for b in self.bubbles:
+            if b.x > self.width():
+                b.x = random.uniform(0, self.width())
+
+    def update_animation(self):
+        self.wave_phase += 0.03
+        if self.wave_phase > 2 * math.pi * 100:
+            self.wave_phase = 0.0
+            
+        w = self.width()
+        h = self.height()
+        for bubble in self.bubbles:
+            bubble.update(w, h)
+            
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        gradient = QLinearGradient(0, 0, 0, self.height())
+        w = self.width()
+        h = self.height()
+
+        # 1. Base Gradient (Soft Blue Theme)
+        gradient = QLinearGradient(0, 0, 0, h)
         gradient.setColorAt(0.0, QColor("#E0F2FE"))
         gradient.setColorAt(0.35, QColor("#F0F9FF"))
         gradient.setColorAt(0.70, QColor("#F8FAFC"))
         gradient.setColorAt(1.0, QColor("#E0F2FE"))
         painter.fillRect(self.rect(), gradient)
 
+        # 2. Animated Top Wave
         wave_path1 = QPainterPath()
         wave_path1.moveTo(0, 0)
-        wave_path1.lineTo(0, 140)
+        
+        y1_start = 130 + math.sin(self.wave_phase) * 15
+        wave_path1.lineTo(0, y1_start)
+        
+        ctrl1_y = 190 + math.sin(self.wave_phase + 1.0) * 25
+        ctrl2_y = 80 + math.cos(self.wave_phase + 2.0) * 25
+        end1_y = 150 + math.sin(self.wave_phase + 0.5) * 15
+        
         wave_path1.cubicTo(
-            QPointF(self.width() * 0.3, 200),
-            QPointF(self.width() * 0.7, 80),
-            QPointF(self.width(), 160)
+            QPointF(w * 0.3, ctrl1_y),
+            QPointF(w * 0.7, ctrl2_y),
+            QPointF(w, end1_y)
         )
-        wave_path1.lineTo(self.width(), 0)
+        wave_path1.lineTo(w, 0)
         wave_path1.closeSubpath()
 
-        wave_grad1 = QLinearGradient(0, 0, self.width(), 200)
-        wave_grad1.setColorAt(0.0, QColor(2, 132, 199, 40))
-        wave_grad1.setColorAt(1.0, QColor(56, 189, 248, 20))
+        wave_grad1 = QLinearGradient(0, 0, w, 200)
+        wave_grad1.setColorAt(0.0, QColor(2, 132, 199, 45))
+        wave_grad1.setColorAt(1.0, QColor(56, 189, 248, 25))
         painter.fillPath(wave_path1, wave_grad1)
 
+        # 3. Animated Bottom Wave
         wave_path2 = QPainterPath()
-        wave_path2.moveTo(0, self.height())
-        wave_path2.lineTo(0, self.height() - 110)
+        wave_path2.moveTo(0, h)
+        
+        y2_start = h - 110 + math.cos(self.wave_phase * 0.8) * 15
+        wave_path2.lineTo(0, y2_start)
+        
+        ctrl3_y = h - 160 + math.sin(self.wave_phase + 1.5) * 20
+        ctrl4_y = h - 40 + math.cos(self.wave_phase + 0.7) * 20
+        end2_y = h - 110 + math.sin(self.wave_phase * 0.8) * 15
+        
         wave_path2.cubicTo(
-            QPointF(self.width() * 0.35, self.height() - 160),
-            QPointF(self.width() * 0.65, self.height() - 40),
-            QPointF(self.width(), self.height() - 110)
+            QPointF(w * 0.35, ctrl3_y),
+            QPointF(w * 0.65, ctrl4_y),
+            QPointF(w, end2_y)
         )
-        wave_path2.lineTo(self.width(), self.height())
+        wave_path2.lineTo(w, h)
         wave_path2.closeSubpath()
 
-        wave_grad2 = QLinearGradient(0, self.height() - 160, self.width(), self.height())
-        wave_grad2.setColorAt(0.0, QColor(2, 132, 199, 25))
-        wave_grad2.setColorAt(1.0, QColor(186, 230, 253, 60))
+        wave_grad2 = QLinearGradient(0, h - 160, w, h)
+        wave_grad2.setColorAt(0.0, QColor(2, 132, 199, 30))
+        wave_grad2.setColorAt(1.0, QColor(186, 230, 253, 70))
         painter.fillPath(wave_path2, wave_grad2)
+
+        # 4. Floating Bluish Bubbles
+        painter.setPen(Qt.PenStyle.NoPen)
+        for bubble in self.bubbles:
+            rad_grad = QRadialGradient(bubble.x, bubble.y, bubble.radius)
+            # Soft glowing center fading out to light blue edge
+            rad_grad.setColorAt(0.0, QColor(186, 230, 253, bubble.alpha))
+            rad_grad.setColorAt(0.7, QColor(56, 189, 248, int(bubble.alpha * 0.6)))
+            rad_grad.setColorAt(1.0, QColor(2, 132, 199, 0))
+            
+            painter.setBrush(rad_grad)
+            painter.drawEllipse(
+                QPointF(bubble.x, bubble.y), 
+                bubble.radius, 
+                bubble.radius
+            )
 
         painter.end()
 
 
-class LoginSelectionPage(WaveBackgroundWidget):
+class LoginSelectionPage(AnimatedWaveBackgroundWidget):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
@@ -166,7 +261,7 @@ class LoginSelectionPage(WaveBackgroundWidget):
         """
 
 
-class AdminLoginPage(WaveBackgroundWidget):
+class AdminLoginPage(AnimatedWaveBackgroundWidget):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
