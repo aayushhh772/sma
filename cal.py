@@ -1,11 +1,13 @@
 import sys
 import os
 import calendar
+import random
+import math
 import subprocess
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, QPointF
-from PyQt6.QtGui import QFont, QPixmap, QPainter, QLinearGradient, QColor, QPainterPath
+from PyQt6.QtCore import Qt, QPointF, QTimer
+from PyQt6.QtGui import QFont, QPixmap, QPainter, QLinearGradient, QRadialGradient, QColor, QPainterPath
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
     QGridLayout, QLabel, QPushButton, QFrame
@@ -38,6 +40,33 @@ def get_logo_widget(height=90):
     return logo_label
 
 
+class FlowParticle:
+    """Soft glowing particle with pulsing radius and gentle horizontal drift."""
+    def __init__(self, bounds_width, bounds_height):
+        self.reset(bounds_width, bounds_height, random_y=True)
+
+    def reset(self, bounds_width, bounds_height, random_y=False):
+        self.base_radius = random.uniform(8, 28)
+        self.radius = self.base_radius
+        self.x = random.uniform(self.base_radius, max(bounds_width - self.base_radius, self.base_radius + 1))
+        self.y = random.uniform(0, bounds_height) if random_y else bounds_height + self.base_radius + random.uniform(0, 40)
+        self.speed = random.uniform(0.3, 0.9)
+        self.sway_speed = random.uniform(0.015, 0.04)
+        self.pulse_speed = random.uniform(0.02, 0.06)
+        self.pulse_amplitude = random.uniform(1.5, 4.0)
+        self.alpha = random.randint(25, 75)
+        self.phase = random.uniform(0, 2 * math.pi)
+
+    def update(self, bounds_width, bounds_height):
+        self.y -= self.speed
+        self.phase += self.sway_speed
+        self.x += math.sin(self.phase) * 0.8
+        self.radius = self.base_radius + math.sin(self.phase * 2) * self.pulse_amplitude
+        
+        if self.y < -self.base_radius * 2:
+            self.reset(bounds_width, bounds_height, random_y=False)
+
+
 class CalendarCell(QLabel):
     def __init__(self, text="", bg_color="rgba(255, 255, 255, 0.92)", text_color="#0F172A", border_color="#BAE6FD", font_size=15):
         super().__init__(text)
@@ -62,6 +91,16 @@ class CalendarWidget(QWidget):
         
         self.setWindowTitle("SOS Hermann Gmeiner Secondary School Gandaki")
         self.resize(780, 620)
+
+        # Wave and Particle Animation parameters
+        self.flow_time = 0.0
+        self.particles = []
+        self.init_particles(32)
+
+        # 60 FPS Animation Timer (~16ms)
+        self.animation_timer = QTimer(self)
+        self.animation_timer.timeout.connect(self.update_animation)
+        self.animation_timer.start(16)
 
         self.setStyleSheet("""
             QLabel {
@@ -98,48 +137,102 @@ class CalendarWidget(QWidget):
         
         self.show_calendar()
 
+    def init_particles(self, count):
+        w = max(self.width(), 780)
+        h = max(self.height(), 620)
+        self.particles = [FlowParticle(w, h) for _ in range(count)]
+
+    def update_animation(self):
+        self.flow_time += 0.025
+        if self.flow_time > 2 * math.pi * 100:
+            self.flow_time = 0.0
+            
+        w = self.width()
+        h = self.height()
+        for p in self.particles:
+            p.update(w, h)
+            
+        self.update()
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        gradient = QLinearGradient(0, 0, 0, self.height())
+        w = self.width()
+        h = self.height()
+
+        # 1. Soft Background Gradient
+        gradient = QLinearGradient(0, 0, 0, h)
         gradient.setColorAt(0.0, QColor("#E0F2FE"))
         gradient.setColorAt(0.35, QColor("#F0F9FF"))
         gradient.setColorAt(0.70, QColor("#F8FAFC"))
         gradient.setColorAt(1.0, QColor("#E0F2FE"))
         painter.fillRect(self.rect(), gradient)
 
-        wave_path1 = QPainterPath()
-        wave_path1.moveTo(0, 0)
-        wave_path1.lineTo(0, 140)
-        wave_path1.cubicTo(
-            QPointF(self.width() * 0.3, 200),
-            QPointF(self.width() * 0.7, 80),
-            QPointF(self.width(), 160)
-        )
-        wave_path1.lineTo(self.width(), 0)
-        wave_path1.closeSubpath()
+        # 2. Dynamic Top Overlapping Waves (Triple Sine Layering)
+        wave_top_1 = QPainterPath()
+        wave_top_1.moveTo(0, 0)
+        
+        steps = 30
+        for i in range(steps + 1):
+            x = (w / steps) * i
+            y = 120 + math.sin(self.flow_time + (x / w) * 2 * math.pi) * 30 + math.cos(self.flow_time * 0.5) * 12
+            wave_top_1.lineTo(x, y)
+            
+        wave_top_1.lineTo(w, 0)
+        wave_top_1.closeSubpath()
 
-        wave_grad1 = QLinearGradient(0, 0, self.width(), 200)
-        wave_grad1.setColorAt(0.0, QColor(2, 132, 199, 40))
-        wave_grad1.setColorAt(1.0, QColor(56, 189, 248, 20))
-        painter.fillPath(wave_path1, wave_grad1)
+        top_grad_1 = QLinearGradient(0, 0, w, 180)
+        top_grad_1.setColorAt(0.0, QColor(2, 132, 199, 45))
+        top_grad_1.setColorAt(1.0, QColor(56, 189, 248, 15))
+        painter.fillPath(wave_top_1, top_grad_1)
 
-        wave_path2 = QPainterPath()
-        wave_path2.moveTo(0, self.height())
-        wave_path2.lineTo(0, self.height() - 110)
-        wave_path2.cubicTo(
-            QPointF(self.width() * 0.35, self.height() - 160),
-            QPointF(self.width() * 0.65, self.height() - 40),
-            QPointF(self.width(), self.height() - 110)
-        )
-        wave_path2.lineTo(self.width(), self.height())
-        wave_path2.closeSubpath()
+        wave_top_2 = QPainterPath()
+        wave_top_2.moveTo(0, 0)
+        for i in range(steps + 1):
+            x = (w / steps) * i
+            y = 95 + math.cos(self.flow_time * 1.2 + (x / w) * 1.5 * math.pi) * 22
+            wave_top_2.lineTo(x, y)
+            
+        wave_top_2.lineTo(w, 0)
+        wave_top_2.closeSubpath()
 
-        wave_grad2 = QLinearGradient(0, self.height() - 160, self.width(), self.height())
-        wave_grad2.setColorAt(0.0, QColor(2, 132, 199, 25))
-        wave_grad2.setColorAt(1.0, QColor(186, 230, 253, 60))
-        painter.fillPath(wave_path2, wave_grad2)
+        top_grad_2 = QLinearGradient(0, 0, w, 140)
+        top_grad_2.setColorAt(0.0, QColor(56, 189, 248, 30))
+        top_grad_2.setColorAt(1.0, QColor(186, 230, 253, 40))
+        painter.fillPath(wave_top_2, top_grad_2)
+
+        # 3. Dynamic Bottom Cresting Waves
+        wave_bot_1 = QPainterPath()
+        wave_bot_1.moveTo(0, h)
+        for i in range(steps + 1):
+            x = (w / steps) * i
+            y = h - 110 + math.sin(self.flow_time * 0.9 + (x / w) * 2 * math.pi) * 25
+            wave_bot_1.lineTo(x, y)
+            
+        wave_bot_1.lineTo(w, h)
+        wave_bot_1.closeSubpath()
+
+        bot_grad_1 = QLinearGradient(0, h - 150, w, h)
+        bot_grad_1.setColorAt(0.0, QColor(2, 132, 199, 35))
+        bot_grad_1.setColorAt(1.0, QColor(186, 230, 253, 65))
+        painter.fillPath(wave_bot_1, bot_grad_1)
+
+        # 4. Floating Soft-Orb Particles
+        painter.setPen(Qt.PenStyle.NoPen)
+        for p in self.particles:
+            rad_grad = QRadialGradient(p.x, p.y, p.radius)
+            rad_grad.setColorAt(0.0, QColor(224, 242, 254, p.alpha))
+            rad_grad.setColorAt(0.4, QColor(56, 189, 248, int(p.alpha * 0.7)))
+            rad_grad.setColorAt(0.85, QColor(2, 132, 199, int(p.alpha * 0.2)))
+            rad_grad.setColorAt(1.0, QColor(2, 132, 199, 0))
+            
+            painter.setBrush(rad_grad)
+            painter.drawEllipse(
+                QPointF(p.x, p.y), 
+                p.radius, 
+                p.radius
+            )
 
         painter.end()
 
