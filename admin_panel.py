@@ -1,764 +1,741 @@
 import sys
 import os
+import json
+import math
+import random
+import datetime
 import subprocess
+
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QLabel, QPushButton,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QFileDialog, QFrame, 
-    QLineEdit, QComboBox, QListWidget, QTextEdit, QScrollArea
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QFrame, QPushButton, QLineEdit, QTextEdit, QComboBox, 
+    QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem, 
+    QHeaderView, QStackedWidget
 )
-from PyQt6.QtCore import Qt, QTimer, QTime, QDate, QPointF
-from PyQt6.QtGui import QFont, QPainter, QLinearGradient, QColor, QPainterPath
+from PyQt6.QtCore import Qt, QTimer, QPointF
+from PyQt6.QtGui import QFont, QPixmap, QPainter, QPainterPath, QColor, QPen, QBrush
+
+DATA_FILE = "data.json"
+LOGO_FILENAME = "logo.png"
+EXPIRATION_HOURS = 12
+
+def parse_iso_timestamp(ts_str):
+    if not ts_str:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(ts_str)
+    except Exception:
+        return None
+
+def is_recent(ts_str, max_hours=EXPIRATION_HOURS):
+    dt = parse_iso_timestamp(ts_str)
+    if not dt:
+        return True
+    now = datetime.datetime.now()
+    return (now - dt).total_seconds() < (max_hours * 3600)
 
 
-class WaveBackgroundWidget(QWidget):
+class Bubble:
+    def __init__(self, width, height):
+        self.reset(width, height, first_time=True)
+
+    def reset(self, width, height, first_time=False):
+        self.x = random.uniform(0, width if width > 0 else 1000)
+        self.y = random.uniform(0, height) if first_time else height + random.uniform(10, 50)
+        self.radius = random.uniform(12, 35)
+        self.speed = random.uniform(0.4, 1.2)
+        self.opacity = random.randint(25, 75)
+        self.wobble_speed = random.uniform(0.02, 0.05)
+        self.wobble = random.uniform(0, 6.28)
+
+    def update(self, width, height):
+        self.y -= self.speed
+        self.wobble += self.wobble_speed
+        self.x += math.sin(self.wobble) * 0.5
+        if self.y < -self.radius * 2:
+            self.reset(width, height)
+
+
+class AnimatedBackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.wave_phase = 0.0
+        self.bubbles = []
+        
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.animate)
+        self.timer.start(16)
+
+    def init_bubbles(self):
+        w = max(self.width(), 800)
+        h = max(self.height(), 600)
+        self.bubbles = [Bubble(w, h) for _ in range(25)]
+
+    def resizeEvent(self, event):
+        if not self.bubbles:
+            self.init_bubbles()
+        super().resizeEvent(event)
+
+    def animate(self):
+        self.wave_phase += 0.02
+        w, h = self.width(), self.height()
+        for b in self.bubbles:
+            b.update(w, h)
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        gradient = QLinearGradient(0, 0, 0, self.height())
-        gradient.setColorAt(0.0, QColor("#E0F2FE"))
-        gradient.setColorAt(0.35, QColor("#F0F9FF"))
-        gradient.setColorAt(0.70, QColor("#F8FAFC"))
-        gradient.setColorAt(1.0, QColor("#E0F2FE"))
-        painter.fillRect(self.rect(), gradient)
+        w = self.width()
+        h = self.height()
 
-        wave_path1 = QPainterPath()
-        wave_path1.moveTo(0, 0)
-        wave_path1.lineTo(0, 140)
-        wave_path1.cubicTo(
-            QPointF(self.width() * 0.3, 200),
-            QPointF(self.width() * 0.7, 80),
-            QPointF(self.width(), 160)
-        )
-        wave_path1.lineTo(self.width(), 0)
-        wave_path1.closeSubpath()
+        painter.fillRect(0, 0, w, h, QColor("#eaf5fc"))
 
-        wave_grad1 = QLinearGradient(0, 0, self.width(), 200)
-        wave_grad1.setColorAt(0.0, QColor(2, 132, 199, 40))
-        wave_grad1.setColorAt(1.0, QColor(56, 189, 248, 20))
-        painter.fillPath(wave_path1, wave_grad1)
+        self.draw_wave(painter, w, h, offset_y=h * 0.45, amplitude=25, frequency=0.008, color=QColor(0, 150, 220, 25), phase_shift=self.wave_phase)
+        self.draw_wave(painter, w, h, offset_y=h * 0.55, amplitude=35, frequency=0.005, color=QColor(0, 110, 200, 20), phase_shift=self.wave_phase * 0.7)
+        self.draw_wave(painter, w, h, offset_y=h * 0.65, amplitude=20, frequency=0.01, color=QColor(0, 160, 230, 30), phase_shift=self.wave_phase * 1.3)
 
-        wave_path2 = QPainterPath()
-        wave_path2.moveTo(0, self.height())
-        wave_path2.lineTo(0, self.height() - 110)
-        wave_path2.cubicTo(
-            QPointF(self.width() * 0.35, self.height() - 160),
-            QPointF(self.width() * 0.65, self.height() - 40),
-            QPointF(self.width(), self.height() - 110)
-        )
-        wave_path2.lineTo(self.width(), self.height())
-        wave_path2.closeSubpath()
+        for b in self.bubbles:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor(255, 255, 255, b.opacity)))
+            painter.drawEllipse(QPointF(b.x, b.y), b.radius, b.radius)
+            
+            painter.setBrush(QBrush(QColor(0, 150, 220, int(b.opacity * 0.4))))
+            painter.drawEllipse(QPointF(b.x - b.radius * 0.3, b.y - b.radius * 0.3), b.radius * 0.35, b.radius * 0.35)
 
-        wave_grad2 = QLinearGradient(0, self.height() - 160, self.width(), self.height())
-        wave_grad2.setColorAt(0.0, QColor(2, 132, 199, 25))
-        wave_grad2.setColorAt(1.0, QColor(186, 230, 253, 60))
-        painter.fillPath(wave_path2, wave_grad2)
+    def draw_wave(self, painter, width, height, offset_y, amplitude, frequency, color, phase_shift):
+        path = QPainterPath()
+        path.moveTo(0, height)
+        path.lineTo(0, offset_y)
 
-        painter.end()
+        x = 0
+        while x <= width:
+            y = offset_y + math.sin(x * frequency + phase_shift) * amplitude
+            path.lineTo(x, y)
+            x += 10
+
+        path.lineTo(width, height)
+        path.closeSubpath()
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(color))
+        painter.drawPath(path)
 
 
-class AdminPanel(QMainWindow):
+class AdminPanel(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SOS HGS Gandaki - Admin Panel")
-        self.setMinimumSize(1000, 680)
-        self.resize(1200, 800)
-
-        # State Variables
         self.selected_pdf_path = None
-
         self.init_ui()
 
     def init_ui(self):
-        central_widget = WaveBackgroundWidget()
-        self.setCentralWidget(central_widget)
+        self.setWindowTitle("SOS Hermann Gmeiner School Gandaki - Admin Panel")
+        self.resize(1100, 700)
 
-        root_layout = QHBoxLayout(central_widget)
-        root_layout.setContentsMargins(12, 12, 12, 12)
-        root_layout.setSpacing(12)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
 
-        # ---------------- SIDEBAR ----------------
+        self.bg_widget = AnimatedBackgroundWidget(self)
+        root_layout.addWidget(self.bg_widget)
+
+        main_layout = QHBoxLayout(self.bg_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Sidebar
         sidebar = QFrame()
-        sidebar.setFixedWidth(110)
+        sidebar.setFixedWidth(260)
         sidebar.setStyleSheet("""
             QFrame {
-                background-color: rgba(255, 255, 255, 0.90);
-                border: 1px solid #BAE6FD;
-                border-radius: 12px;
+                background-color: rgba(255, 255, 255, 0.92);
+                border-right: 1px solid #cbe3f5;
             }
         """)
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(10, 16, 10, 16)
-        sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        sidebar_layout.setContentsMargins(20, 25, 20, 25)
+        sidebar_layout.setSpacing(12)
 
-        dash_btn = QPushButton("DASHBOARD")
-        dash_btn.setFixedSize(85, 75)
-        dash_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        dash_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0369A1);
-                color: #FFFFFF;
-                font-size: 10px;
-                font-weight: bold;
-                border-radius: 10px;
-                border: none;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #0284C7);
-            }
-        """)
-        sidebar_layout.addWidget(dash_btn)
+        # Logo & Title
+        logo_lbl = QLabel()
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), LOGO_FILENAME)
+        if not os.path.exists(logo_path):
+            logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "486624203_601802256148254_3403736131493055483_n.png")
+
+        if os.path.exists(logo_path):
+            pix = QPixmap(logo_path).scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_lbl.setPixmap(pix)
+        logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_lbl.setStyleSheet("border: none; background: transparent;")
+        sidebar_layout.addWidget(logo_lbl)
+
+        school_lbl = QLabel("SOS Hermann Gmeiner\nSchool Gandaki")
+        school_lbl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        school_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        school_lbl.setStyleSheet("color: #0066b2; border: none; background: transparent; margin-bottom: 10px;")
+        sidebar_layout.addWidget(school_lbl)
+
+        btn_notices = QPushButton("📢  Notices & PDFs")
+        btn_subs = QPushButton("🔄  Substitutions")
+
+        self.nav_btns = [btn_notices, btn_subs]
+        for idx, btn in enumerate(self.nav_btns):
+            btn.setFixedHeight(42)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda _, i=idx: self.switch_page(i))
+            sidebar_layout.addWidget(btn)
 
         sidebar_layout.addStretch()
 
-        support_btn = QPushButton("SUPPORT\n& HELP")
-        support_btn.setFixedSize(85, 60)
-        support_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        support_btn.setStyleSheet("""
+        # Help Button
+        btn_help = QPushButton("❓  Help")
+        btn_help.setFixedHeight(42)
+        btn_help.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_help.setStyleSheet("""
             QPushButton {
-                background-color: #E0F2FE;
-                color: #0284C7;
-                font-size: 10px;
+                background-color: #f39c12;
+                color: #ffffff;
+                border-radius: 8px;
                 font-weight: bold;
-                border-radius: 10px;
-                border: 1px solid #BAE6FD;
+                border: none;
+                font-size: 13px;
             }
             QPushButton:hover {
-                background-color: #BAE6FD;
-                color: #0369A1;
-            }
-            QPushButton:pressed {
-                background-color: #7DD3FC;
+                background-color: #d68910;
             }
         """)
-        support_btn.clicked.connect(self.launch_help_page)
-        sidebar_layout.addWidget(support_btn)
+        btn_help.clicked.connect(self.open_help_page)
+        sidebar_layout.addWidget(btn_help)
 
-        logout_btn = QPushButton("LOG OUT")
-        logout_btn.setFixedSize(85, 60)
-        logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        logout_btn.setStyleSheet("""
+        # Exit Button
+        btn_exit = QPushButton("🚪  Exit Admin Panel")
+        btn_exit.setFixedHeight(42)
+        btn_exit.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_exit.setStyleSheet("""
             QPushButton {
-                background-color: #FEF2F2;
-                color: #E11D48;
-                font-size: 10px;
+                background-color: #e74c3c;
+                color: #ffffff;
+                border-radius: 8px;
                 font-weight: bold;
-                border-radius: 10px;
-                border: 1px solid #FECDD3;
+                border: none;
+                font-size: 13px;
             }
             QPushButton:hover {
-                background-color: #FFE4E6;
-                color: #BE123C;
-            }
-            QPushButton:pressed {
-                background-color: #FCA5A5;
+                background-color: #c0392b;
             }
         """)
-        logout_btn.clicked.connect(self.launch_admin_page)
-        sidebar_layout.addWidget(logout_btn)
+        btn_exit.clicked.connect(self.exit_to_adminpage)
+        sidebar_layout.addWidget(btn_exit)
 
-        root_layout.addWidget(sidebar)
+        main_layout.addWidget(sidebar)
 
-        # ---------------- CONTENT AREA ----------------
-        content_area = QWidget()
-        content_area.setStyleSheet("background: transparent;")
-        content_layout = QVBoxLayout(content_area)
-        content_layout.setContentsMargins(10, 8, 10, 8)
-        content_layout.setSpacing(12)
+        # Pages Container
+        self.stacked_widget = QStackedWidget()
+        self.stacked_widget.setStyleSheet("background: transparent;")
 
-        # ---------------- HEADER ----------------
-        header_layout = QHBoxLayout()
+        # Page 1: Notices
+        self.notice_page = QWidget()
+        self.setup_notice_page()
+        self.stacked_widget.addWidget(self.notice_page)
 
-        title_widget = QWidget()
-        title_widget.setStyleSheet("background: transparent;")
-        title_layout = QVBoxLayout(title_widget)
-        title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.setSpacing(2)
+        # Page 2: Substitutions
+        self.sub_page = QWidget()
+        self.setup_sub_page()
+        self.stacked_widget.addWidget(self.sub_page)
 
-        main_title = QLabel("SOS HGS GANDAKI")
-        main_title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        main_title.setStyleSheet("color: #0369A1; background: transparent;")
+        main_layout.addWidget(self.stacked_widget)
+        self.switch_page(0)
 
-        sub_title = QLabel("ADMIN PORTAL")
-        sub_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        sub_title.setStyleSheet("color: #64748B; letter-spacing: 1px; background: transparent;")
+    def switch_page(self, index):
+        self.stacked_widget.setCurrentIndex(index)
+        active_style = """
+            QPushButton {
+                background-color: #0077c8;
+                color: #ffffff;
+                border-radius: 8px;
+                text-align: left;
+                padding-left: 15px;
+                font-weight: bold;
+                border: none;
+                font-size: 13px;
+            }
+        """
+        inactive_style = """
+            QPushButton {
+                background-color: transparent;
+                color: #2c3e50;
+                border-radius: 8px;
+                text-align: left;
+                padding-left: 15px;
+                font-weight: bold;
+                border: none;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #e1f0fa;
+                color: #0066b2;
+            }
+        """
+        for i, btn in enumerate(self.nav_btns):
+            btn.setStyleSheet(active_style if i == index else inactive_style)
 
-        title_layout.addWidget(main_title)
-        title_layout.addWidget(sub_title)
-        header_layout.addWidget(title_widget)
+    def setup_notice_page(self):
+        layout = QVBoxLayout(self.notice_page)
+        layout.setContentsMargins(35, 30, 35, 30)
+        layout.setSpacing(15)
 
-        header_layout.addStretch()
+        head_lbl = QLabel("Publish Notice & Attach PDF")
+        head_lbl.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        head_lbl.setStyleSheet("color: #004080; background: transparent;")
+        layout.addWidget(head_lbl)
 
-        self.clock_label = QLabel()
-        self.clock_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        self.clock_label.setStyleSheet("color: #0F172A; background: transparent;")
-        self.clock_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        header_layout.addWidget(self.clock_label)
-
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_clock)
-        self.timer.start(1000)
-        self.update_clock()
-
-        content_layout.addLayout(header_layout)
-
-        # ---------------- MAIN GRID ----------------
-        grid_layout = QGridLayout()
-        grid_layout.setSpacing(12)
-
-        # ---------------- 1. SUBSTITUTION CARD ----------------
-        sub_card = QFrame()
-        sub_card.setStyleSheet("""
+        form_card = QFrame()
+        form_card.setStyleSheet("""
             QFrame {
-                background-color: rgba(255, 255, 255, 0.92);
-                border: 1px solid #BAE6FD;
+                background-color: rgba(255, 255, 255, 0.95);
                 border-radius: 12px;
+                border: 1px solid #cbe3f5;
+                padding: 15px;
             }
         """)
-        sub_layout = QVBoxLayout(sub_card)
-        sub_layout.setContentsMargins(18, 14, 18, 14)
-        sub_layout.setSpacing(10)
+        form_layout = QVBoxLayout(form_card)
 
-        sub_title_lbl = QLabel("LIVE SUBSTITUTION ENTRY")
-        sub_title_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        sub_title_lbl.setStyleSheet("color: #0369A1; border: none; background: transparent;")
-        sub_layout.addWidget(sub_title_lbl)
+        # Target Selector
+        target_layout = QHBoxLayout()
+        target_lbl = QLabel("Target Group:")
+        target_lbl.setStyleSheet("color: #2c3e50; font-weight: bold; border: none; background: transparent;")
+        
+        self.combo_target = QComboBox()
+        self.combo_target.addItems([
+            "Class 6-12", "Class 6-10", "Class 11-12", 
+            "Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"
+        ])
+        
+        section_lbl = QLabel("Section:")
+        section_lbl.setStyleSheet("color: #2c3e50; font-weight: bold; border: none; background: transparent;")
+        
+        self.combo_section = QComboBox()
 
-        row1_layout = QHBoxLayout()
-        row1_layout.setSpacing(12)
-
-        class_container, self.class_combo = self.create_combobox_field("Class", [str(i) for i in range(6, 13)])
-        section_container, self.section_combo = self.create_combobox_field("Section", [])
-        period_container, self.period_combo = self.create_combobox_field("Period", [])
-
-        row1_layout.addWidget(class_container)
-        row1_layout.addWidget(section_container)
-        row1_layout.addWidget(period_container)
-
-        sub_layout.addLayout(row1_layout)
-
-        self.class_combo.currentIndexChanged.connect(self.update_dependent_dropdowns)
-        self.update_dependent_dropdowns()
-
-        row2_layout = QHBoxLayout()
-        row2_layout.setSpacing(12)
-
-        self.absent_teacher_input = self.create_input_field(row2_layout, "Absent Teacher", "Enter absent teacher name")
-        self.sub_teacher_input = self.create_input_field(row2_layout, "Substitute Teacher", "Enter substitute teacher name")
-
-        sub_layout.addLayout(row2_layout)
-
-        post_sub_btn = QPushButton("POST LIVE SUBSTITUTION")
-        post_sub_btn.setFixedHeight(38)
-        post_sub_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        post_sub_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0369A1);
-                color: #FFFFFF;
-                font-size: 11px;
-                font-weight: bold;
-                border-radius: 6px;
-                border: none;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #0284C7);
-            }
-        """)
-        sub_layout.addWidget(post_sub_btn)
-
-        grid_layout.addWidget(sub_card, 0, 0, 1, 2)
-
-        # ---------------- 2. NOTICES CARD WITH SCROLL AREA ----------------
-        notices_card = QFrame()
-        notices_card.setStyleSheet("""
-            QFrame {
-                background-color: rgba(255, 255, 255, 0.92);
-                border: 1px solid #BAE6FD;
-                border-radius: 12px;
-            }
-        """)
-        outer_notices_layout = QVBoxLayout(notices_card)
-        outer_notices_layout.setContentsMargins(14, 12, 14, 12)
-        outer_notices_layout.setSpacing(6)
-
-        notices_title = QLabel("NOTICES ENTRY")
-        notices_title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        notices_title.setStyleSheet("color: #0369A1; border: none; background: transparent;")
-        outer_notices_layout.addWidget(notices_title)
-
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setStyleSheet("""
-            QScrollArea {
-                background: transparent;
-                border: none;
-            }
-            QScrollBar:vertical {
-                border: none;
-                background: #F1F5F9;
-                width: 6px;
-                border-radius: 3px;
-            }
-            QScrollBar::handle:vertical {
-                background: #BAE6FD;
-                border-radius: 3px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #0284C7;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-        """)
-
-        scroll_content = QWidget()
-        scroll_content.setStyleSheet("background: transparent;")
-        notices_layout = QVBoxLayout(scroll_content)
-        notices_layout.setContentsMargins(4, 4, 10, 4)
-        notices_layout.setSpacing(10)
-
-        self.notice_title_input = QLineEdit()
-        self.notice_title_input.setPlaceholderText("Enter Notice Title")
-        self.notice_title_input.setFixedHeight(34)
-        self.notice_title_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #FFFFFF;
-                color: #0F172A;
-                border: 1px solid #BAE6FD;
-                border-radius: 6px;
-                padding: 4px 10px;
-                font-size: 11px;
-            }
-            QLineEdit:focus {
-                border-color: #0284C7;
-            }
-        """)
-        notices_layout.addWidget(self.notice_title_input)
-
-        self.notice_content_input = QTextEdit()
-        self.notice_content_input.setPlaceholderText("Write the details/content of the notice here...")
-        self.notice_content_input.setMinimumHeight(70)
-        self.notice_content_input.setStyleSheet("""
-            QTextEdit {
-                background-color: #FFFFFF;
-                color: #0F172A;
-                border: 1px solid #BAE6FD;
-                border-radius: 6px;
-                padding: 6px 10px;
-                font-size: 11px;
-            }
-            QTextEdit:focus {
-                border-color: #0284C7;
-            }
-        """)
-        notices_layout.addWidget(self.notice_content_input)
-
-        target_label = QLabel("Target Audience / Class Range:")
-        target_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-        target_label.setStyleSheet("color: #0369A1; border: none; background: transparent;")
-        notices_layout.addWidget(target_label)
-
-        range_layout = QHBoxLayout()
-        range_layout.setSpacing(8)
-
-        target_preset_container, self.target_preset_combo = self.create_combobox_field(
-            "Preset Target", 
-            ["All Classes (6-12)", "Junior High (6-10)", "Senior High (11-12)", "Custom Grade Range"]
-        )
-        range_layout.addWidget(target_preset_container)
-
-        self.custom_range_widget = QWidget()
-        self.custom_range_widget.setStyleSheet("border: none; background: transparent;")
-        custom_layout = QHBoxLayout(self.custom_range_widget)
-        custom_layout.setContentsMargins(0, 0, 0, 0)
-        custom_layout.setSpacing(6)
-
-        start_cnt, self.start_grade_combo = self.create_combobox_field("From", [str(i) for i in range(6, 13)])
-        end_cnt, self.end_grade_combo = self.create_combobox_field("To", [str(i) for i in range(6, 13)])
-        self.end_grade_combo.setCurrentText("12")
-
-        custom_layout.addWidget(start_cnt)
-        custom_layout.addWidget(end_cnt)
-
-        range_layout.addWidget(self.custom_range_widget)
-
-        section_cnt, self.notice_section_combo = self.create_combobox_field(
-            "Section", 
-            ["All Sections", "Section A", "Section B", "Section C", "Section D"]
-        )
-        range_layout.addWidget(section_cnt)
-
-        notices_layout.addLayout(range_layout)
-
-        self.target_preset_combo.currentIndexChanged.connect(self.on_preset_changed)
-        self.start_grade_combo.currentIndexChanged.connect(self.update_notice_sections)
-        self.end_grade_combo.currentIndexChanged.connect(self.update_notice_sections)
-        self.custom_range_widget.setVisible(False)
-
-        pdf_container = QWidget()
-        pdf_container.setStyleSheet("border: none; background: transparent;")
-        pdf_layout = QHBoxLayout(pdf_container)
-        pdf_layout.setContentsMargins(0, 0, 0, 0)
-        pdf_layout.setSpacing(8)
-
-        self.file_label = QLabel("No PDF Selected")
-        self.file_label.setFont(QFont("Segoe UI", 9))
-        self.file_label.setStyleSheet("color: #64748B; border: none; background: transparent;")
-        pdf_layout.addWidget(self.file_label)
-
-        upload_pdf_btn = QPushButton("BROWSE PDF")
-        upload_pdf_btn.setFixedHeight(32)
-        upload_pdf_btn.setFixedWidth(110)
-        upload_pdf_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        upload_pdf_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #E0F2FE;
-                color: #0369A1;
-                font-size: 10px;
-                font-weight: bold;
-                border-radius: 6px;
-                border: 1px solid #BAE6FD;
-            }
-            QPushButton:hover {
-                background-color: #BAE6FD;
-                color: #0284C7;
-            }
-        """)
-        upload_pdf_btn.clicked.connect(self.upload_pdf)
-        pdf_layout.addWidget(upload_pdf_btn)
-        notices_layout.addWidget(pdf_container)
-
-        post_notice_btn = QPushButton("POST NOTICE")
-        post_notice_btn.setFixedHeight(36)
-        post_notice_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        post_notice_btn.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0369A1);
-                color: #FFFFFF;
-                font-size: 11px;
-                font-weight: bold;
-                border-radius: 6px;
-                border: none;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #0284C7);
-            }
-        """)
-        post_notice_btn.clicked.connect(self.post_notice)
-        notices_layout.addWidget(post_notice_btn)
-
-        scroll_area.setWidget(scroll_content)
-        outer_notices_layout.addWidget(scroll_area)
-
-        grid_layout.addWidget(notices_card, 1, 0)
-
-        # ---------------- 3. RECENT NOTICES CARD ----------------
-        recent_card = QFrame()
-        recent_card.setStyleSheet("""
-            QFrame {
-                background-color: rgba(255, 255, 255, 0.92);
-                border: 1px solid #BAE6FD;
-                border-radius: 12px;
-            }
-        """)
-        recent_layout = QVBoxLayout(recent_card)
-        recent_layout.setContentsMargins(18, 14, 18, 14)
-        recent_layout.setSpacing(10)
-
-        rec_top_layout = QHBoxLayout()
-        rec_top_layout.setContentsMargins(0, 0, 0, 0)
-        rec_title = QLabel("RECENT NOTICES")
-        rec_title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        rec_title.setStyleSheet("color: #0369A1; border: none; background: transparent;")
-        rec_top_layout.addWidget(rec_title)
-
-        rec_search = QLineEdit()
-        rec_search.setPlaceholderText("Search notices...")
-        rec_search.setFixedSize(140, 30)
-        rec_search.setStyleSheet("""
-            QLineEdit {
-                background-color: #FFFFFF;
-                color: #0F172A;
-                border: 1px solid #BAE6FD;
-                border-radius: 6px;
-                padding: 3px 8px;
-                font-size: 10px;
-            }
-            QLineEdit:focus {
-                border-color: #0284C7;
-            }
-        """)
-        rec_search.textChanged.connect(self.filter_recent_notices)
-        rec_top_layout.addWidget(rec_search)
-        recent_layout.addLayout(rec_top_layout)
-
-        self.recent_notices_list = QListWidget()
-        self.recent_notices_list.setStyleSheet("""
-            QListWidget {
-                background-color: #FFFFFF;
-                color: #0F172A;
-                border: 1px solid #BAE6FD;
-                border-radius: 6px;
-                padding: 4px;
-                font-size: 11px;
-            }
-            QListWidget::item {
-                padding: 6px;
-                border-bottom: 1px solid #F1F5F9;
-            }
-        """)
-        recent_layout.addWidget(self.recent_notices_list)
-
-        grid_layout.addWidget(recent_card, 1, 1)
-
-        grid_layout.setRowStretch(0, 0)
-        grid_layout.setRowStretch(1, 1)
-        grid_layout.setColumnStretch(0, 1)
-        grid_layout.setColumnStretch(1, 1)
-
-        content_layout.addLayout(grid_layout)
-
-        footer_label = QLabel("SOS HGS Gandaki • School Management System")
-        footer_label.setFont(QFont("Segoe UI", 9))
-        footer_label.setStyleSheet("color: #64748B; background: transparent;")
-        content_layout.addWidget(footer_label)
-
-        root_layout.addWidget(content_area)
-
-    def create_combobox_field(self, label_text, items):
-        container = QWidget()
-        container.setStyleSheet("border: none; background: transparent;")
-        vbox = QVBoxLayout(container)
-        vbox.setContentsMargins(0, 0, 0, 0)
-        vbox.setSpacing(4)
-
-        lbl = QLabel(label_text)
-        lbl.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-        lbl.setStyleSheet("color: #0369A1; border: none; background: transparent;")
-        vbox.addWidget(lbl)
-
-        combo = QComboBox()
-        combo.setFixedHeight(34)
-        if items:
-            combo.addItems(items)
-
-        combo.setStyleSheet("""
+        combo_style = """
             QComboBox {
-                background-color: #FFFFFF;
-                color: #0F172A;
-                border: 1px solid #BAE6FD;
+                background-color: #ffffff;
+                color: #1a2a3a;
+                padding: 6px 10px;
                 border-radius: 6px;
-                padding-left: 8px;
-                font-size: 10px;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 18px;
+                border: 1px solid #b2d4ee;
             }
             QComboBox:focus {
-                border-color: #0284C7;
+                border: 1px solid #0077c8;
             }
             QComboBox QAbstractItemView {
-                background-color: #FFFFFF;
-                color: #0F172A;
-                selection-background-color: #E0F2FE;
-                selection-color: #0369A1;
-                border: 1px solid #BAE6FD;
+                background-color: #ffffff;
+                color: #1a2a3a;
+                selection-background-color: #0077c8;
+                selection-color: #ffffff;
+                border: 1px solid #b2d4ee;
                 outline: none;
-                padding: 4px;
             }
-        """)
-        vbox.addWidget(combo)
-        return container, combo
+        """
+        self.combo_target.setStyleSheet(combo_style)
+        self.combo_section.setStyleSheet(combo_style)
 
-    def on_preset_changed(self):
-        selected = self.target_preset_combo.currentText()
-        if selected == "Custom Grade Range":
-            self.custom_range_widget.setVisible(True)
-        else:
-            self.custom_range_widget.setVisible(False)
-        self.update_notice_sections()
+        self.combo_target.currentTextChanged.connect(self.update_section_options)
+        self.update_section_options(self.combo_target.currentText())
 
-    def update_notice_sections(self):
-        preset = self.target_preset_combo.currentText()
+        target_layout.addWidget(target_lbl)
+        target_layout.addWidget(self.combo_target)
+        target_layout.addSpacing(20)
+        target_layout.addWidget(section_lbl)
+        target_layout.addWidget(self.combo_section)
+        target_layout.addStretch()
+        form_layout.addLayout(target_layout)
 
-        if preset == "Junior High (6-10)":
-            has_senior = False
-        elif preset == "Senior High (11-12)":
-            has_senior = True
-        elif preset == "All Classes (6-12)":
-            has_senior = True
-        else:
-            try:
-                start = int(self.start_grade_combo.currentText() or 6)
-                end = int(self.end_grade_combo.currentText() or 12)
-                has_senior = (start >= 11 or end >= 11)
-            except ValueError:
-                has_senior = True
-
-        current_sec = self.notice_section_combo.currentText()
-        self.notice_section_combo.clear()
-
-        if has_senior:
-            self.notice_section_combo.addItems(["All Sections", "Section A", "Section B", "Section C", "Section D"])
-        else:
-            self.notice_section_combo.addItems(["All Sections", "Section A", "Section B"])
-
-        if self.notice_section_combo.findText(current_sec) != -1:
-            self.notice_section_combo.setCurrentText(current_sec)
-
-    def update_dependent_dropdowns(self):
-        try:
-            selected_class = int(self.class_combo.currentText())
-        except ValueError:
-            selected_class = 6
-
-        self.section_combo.clear()
-        if selected_class <= 10:
-            self.section_combo.addItems(["A", "B"])
-        else:
-            self.section_combo.addItems(["A", "B", "C", "D"])
-
-        self.period_combo.clear()
-        if selected_class <= 10:
-            self.period_combo.addItems([str(i) for i in range(1, 9)])
-        else:
-            self.period_combo.addItems([str(i) for i in range(1, 10)])
-
-    def create_input_field(self, layout, label_text, placeholder):
-        container = QWidget()
-        container.setStyleSheet("border: none; background: transparent;")
-        vbox = QVBoxLayout(container)
-        vbox.setContentsMargins(0, 0, 0, 0)
-        vbox.setSpacing(4)
-
-        lbl = QLabel(label_text)
-        lbl.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-        lbl.setStyleSheet("color: #0369A1; border: none; background: transparent;")
-        vbox.addWidget(lbl)
-
-        field = QLineEdit()
-        field.setPlaceholderText(placeholder)
-        field.setFixedHeight(36)
-        field.setStyleSheet("""
-            QLineEdit {
-                background-color: #FFFFFF;
-                color: #0F172A;
-                border: 1px solid #BAE6FD;
+        input_style = """
+            QLineEdit, QTextEdit {
+                background-color: #ffffff;
+                color: #1a2a3a;
+                padding: 8px;
                 border-radius: 6px;
-                padding: 4px 10px;
-                font-size: 11px;
+                border: 1px solid #b2d4ee;
             }
-            QLineEdit:focus {
-                border-color: #0284C7;
+            QLineEdit:focus, QTextEdit:focus {
+                border: 1px solid #0077c8;
+                background-color: #ffffff;
+            }
+        """
+        self.input_notice_title = QLineEdit()
+        self.input_notice_title.setPlaceholderText("Notice Title")
+        self.input_notice_title.setStyleSheet(input_style)
+        form_layout.addWidget(self.input_notice_title)
+
+        self.input_notice_body = QTextEdit()
+        self.input_notice_body.setPlaceholderText("Write the notice content here...")
+        self.input_notice_body.setStyleSheet(input_style)
+        self.input_notice_body.setFixedHeight(90)
+        form_layout.addWidget(self.input_notice_body)
+
+        pdf_layout = QHBoxLayout()
+        btn_upload = QPushButton("📄 Select PDF Document")
+        btn_upload.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_upload.setStyleSheet("""
+            QPushButton {
+                background-color: #e1f0fa;
+                color: #0066b2;
+                padding: 6px 14px;
+                border-radius: 6px;
+                border: 1px solid #b2d4ee;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #0077c8;
+                color: #ffffff;
             }
         """)
-        vbox.addWidget(field)
-        layout.addWidget(container)
-        return field
+        btn_upload.clicked.connect(self.upload_pdf)
 
-    def filter_recent_notices(self, text):
-        query = text.strip().lower()
-        for i in range(self.recent_notices_list.count()):
-            item = self.recent_notices_list.item(i)
-            item.setHidden(query not in item.text().lower())
+        self.file_label = QLabel("No PDF selected")
+        self.file_label.setStyleSheet("color: #7f8c8d; font-style: italic; border: none; background: transparent;")
 
-    def update_clock(self):
-        current_time = QTime.currentTime().toString("hh:mm:ss AP")
-        current_date = QDate.currentDate().toString("dddd, d MMMM yyyy")
-        self.clock_label.setText(f"{current_time}\n{current_date}")
+        pdf_layout.addWidget(btn_upload)
+        pdf_layout.addWidget(self.file_label)
+        pdf_layout.addStretch()
+        form_layout.addLayout(pdf_layout)
+
+        btn_post = QPushButton("📢 Publish Notice")
+        btn_post.setFixedHeight(38)
+        btn_post.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_post.setStyleSheet("""
+            QPushButton {
+                background-color: #0077c8;
+                color: #ffffff;
+                border-radius: 6px;
+                font-weight: bold;
+                border: none;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #005fa3;
+            }
+        """)
+        btn_post.clicked.connect(self.post_notice)
+        form_layout.addWidget(btn_post)
+
+        layout.addWidget(form_card)
+
+        list_lbl = QLabel("Active Notices (Auto-expires after 12h)")
+        list_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        list_lbl.setStyleSheet("color: #004080; background: transparent; margin-top: 5px;")
+        layout.addWidget(list_lbl)
+
+        self.table_notices = QTableWidget(0, 5)
+        self.table_notices.setHorizontalHeaderLabels(["Target", "Title", "PDF Attachment", "Date / Time", "Action"])
+        self.table_notices.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_notices.setStyleSheet("""
+            QTableWidget {
+                background-color: rgba(255, 255, 255, 0.95);
+                color: #1a2a3a;
+                border-radius: 8px;
+                border: 1px solid #cbe3f5;
+                gridline-color: #e1f0fa;
+            }
+            QHeaderView::section {
+                background-color: #0077c8;
+                color: #ffffff;
+                border: none;
+                padding: 8px;
+                font-weight: bold;
+            }
+        """)
+        layout.addWidget(self.table_notices)
+
+        self.load_notices()
+
+    def update_section_options(self, target_text):
+        self.combo_section.clear()
+        if target_text in ["Class 11-12", "Class 11", "Class 12"]:
+            sections = ["All Sections", "Section A", "Section B", "Section C", "Section D"]
+        elif target_text in ["Class 6-10", "Class 6", "Class 7", "Class 8", "Class 9", "Class 10"]:
+            sections = ["All Sections", "Section A", "Section B"]
+        else:
+            sections = ["All Sections", "Section A", "Section B", "Section C", "Section D"]
+
+        self.combo_section.addItems(sections)
 
     def upload_pdf(self):
-        file_name, _ = QFileDialog.getOpenFileName(
-            self, "Select PDF Document", "", "PDF Files (*.pdf)"
-        )
+        file_name, _ = QFileDialog.getOpenFileName(self, "Select PDF Document", "", "PDF Files (*.pdf)")
         if file_name:
-            short_name = os.path.basename(file_name)
+            abs_path = os.path.abspath(file_name)
+            short_name = os.path.basename(abs_path)
             self.file_label.setText(f"PDF: {short_name}")
-            self.selected_pdf_path = short_name
+            self.selected_pdf_path = abs_path
 
     def post_notice(self):
-        title_text = self.notice_title_input.text().strip()
-        if not title_text:
+        title = self.input_notice_title.text().strip()
+        body = self.input_notice_body.toPlainText().strip()
+        target = self.combo_target.currentText()
+        section = self.combo_section.currentText()
+
+        if not title:
+            QMessageBox.warning(self, "Warning", "Please enter a notice title.")
             return
 
-        preset = self.target_preset_combo.currentText()
-        section = self.notice_section_combo.currentText()
+        notice_obj = {
+            "title": title,
+            "content": body,
+            "target": target,
+            "section": section,
+            "pdf": self.selected_pdf_path,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
 
-        if preset == "Custom Grade Range":
-            start_g = self.start_grade_combo.currentText()
-            end_g = self.end_grade_combo.currentText()
-            target_tag = f"Class {start_g}-{end_g}" if start_g != end_g else f"Class {start_g}"
-        elif preset == "Junior High (6-10)":
-            target_tag = "Class 6-10"
-        elif preset == "Senior High (11-12)":
-            target_tag = "Class 11-12"
-        else:
-            target_tag = "Class 6-12"
+        data = self.read_data()
+        if "notices" not in data:
+            data["notices"] = []
+        data["notices"].append(notice_obj)
+        self.save_data(data)
 
-        if section != "All Sections":
-            target_tag += f" ({section})"
-
-        notice_display = f"• [{target_tag}] {title_text}"
-        if self.selected_pdf_path:
-            notice_display += f" [PDF: {self.selected_pdf_path}]"
-
-        self.recent_notices_list.insertItem(0, notice_display)
-
-        if self.recent_notices_list.count() > 10:
-            self.recent_notices_list.takeItem(10)
-
-        self.notice_title_input.clear()
-        self.notice_content_input.clear()
-        self.file_label.setText("No PDF Selected")
+        self.input_notice_title.clear()
+        self.input_notice_body.clear()
+        self.file_label.setText("No PDF selected")
         self.selected_pdf_path = None
 
-    def launch_help_page(self):
-        try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            help_path = os.path.join(base_dir, "help.py")
-            if not os.path.exists(help_path):
-                print(f"❌ ERROR: File not found at {help_path}")
-                return
-            subprocess.Popen([sys.executable, help_path], cwd=base_dir)
-            self.close()
-        except Exception as e:
-            print(f"❌ Error launching help.py: {e}")
+        QMessageBox.information(self, "Success", "Notice published successfully!")
+        self.load_notices()
 
-    def launch_admin_page(self):
+    def load_notices(self):
+        data = self.read_data()
+        notices = [n for n in data.get("notices", []) if is_recent(n.get("timestamp"))]
+
+        data["notices"] = notices
+        self.save_data(data)
+
+        self.table_notices.setRowCount(len(notices))
+
+        for row, n in enumerate(notices):
+            target_str = f"{n.get('target', '')} ({n.get('section', '')})"
+            pdf_str = os.path.basename(n.get("pdf")) if n.get("pdf") else "None"
+
+            dt_obj = parse_iso_timestamp(n.get("timestamp"))
+            time_display = dt_obj.strftime("%b %d, %I:%M %p") if dt_obj else "Recently"
+
+            self.table_notices.setItem(row, 0, QTableWidgetItem(target_str))
+            self.table_notices.setItem(row, 1, QTableWidgetItem(n.get("title", "")))
+            self.table_notices.setItem(row, 2, QTableWidgetItem(pdf_str))
+            self.table_notices.setItem(row, 3, QTableWidgetItem(time_display))
+
+            btn_del = QPushButton("Delete")
+            btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_del.setStyleSheet("background-color: #e74c3c; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-weight: bold;")
+            btn_del.clicked.connect(lambda _, r=row: self.delete_notice(r))
+            self.table_notices.setCellWidget(row, 4, btn_del)
+
+    def delete_notice(self, row_idx):
+        data = self.read_data()
+        if "notices" in data and row_idx < len(data["notices"]):
+            data["notices"].pop(row_idx)
+            self.save_data(data)
+            self.load_notices()
+
+    def setup_sub_page(self):
+        layout = QVBoxLayout(self.sub_page)
+        layout.setContentsMargins(35, 30, 35, 30)
+        layout.setSpacing(15)
+
+        head_lbl = QLabel("Manage Daily Substitutions")
+        head_lbl.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        head_lbl.setStyleSheet("color: #004080; background: transparent;")
+        layout.addWidget(head_lbl)
+
+        form_card = QFrame()
+        form_card.setStyleSheet("""
+            QFrame {
+                background-color: rgba(255, 255, 255, 0.95);
+                border-radius: 12px;
+                border: 1px solid #cbe3f5;
+                padding: 15px;
+            }
+        """)
+        form_layout = QHBoxLayout(form_card)
+
+        input_style = """
+            QLineEdit {
+                background-color: #ffffff;
+                color: #1a2a3a;
+                padding: 8px;
+                border-radius: 6px;
+                border: 1px solid #b2d4ee;
+            }
+            QLineEdit:focus {
+                border: 1px solid #0077c8;
+                background-color: #ffffff;
+            }
+        """
+
+        self.sub_class = QLineEdit()
+        self.sub_class.setPlaceholderText("Class (e.g. 6)")
+        self.sub_class.textChanged.connect(self.update_period_placeholder)
+
+        self.sub_sec = QLineEdit()
+        self.sub_sec.setPlaceholderText("Sec (e.g. A)")
+
+        self.sub_period = QLineEdit()
+        self.sub_period.setPlaceholderText("Period (1-8)")
+
+        self.sub_absent = QLineEdit()
+        self.sub_absent.setPlaceholderText("Absent Teacher")
+
+        self.sub_substitute = QLineEdit()
+        self.sub_substitute.setPlaceholderText("Substitute Teacher")
+
+        inputs = [self.sub_class, self.sub_sec, self.sub_period, self.sub_absent, self.sub_substitute]
+        for inp in inputs:
+            inp.setStyleSheet(input_style)
+            form_layout.addWidget(inp)
+
+        btn_add_sub = QPushButton("Add")
+        btn_add_sub.setFixedHeight(35)
+        btn_add_sub.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_add_sub.setStyleSheet("""
+            QPushButton {
+                background-color: #0077c8;
+                color: #ffffff;
+                padding: 6px 18px;
+                border-radius: 6px;
+                font-weight: bold;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #005fa3;
+            }
+        """)
+        btn_add_sub.clicked.connect(self.add_substitution)
+        form_layout.addWidget(btn_add_sub)
+
+        layout.addWidget(form_card)
+
+        self.table_subs = QTableWidget(0, 7)
+        self.table_subs.setHorizontalHeaderLabels(["Class", "Sec", "Period", "Absent Teacher", "Substitute", "Date / Time", "Action"])
+        self.table_subs.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table_subs.setStyleSheet("""
+            QTableWidget {
+                background-color: rgba(255, 255, 255, 0.95);
+                color: #1a2a3a;
+                border-radius: 8px;
+                border: 1px solid #cbe3f5;
+                gridline-color: #e1f0fa;
+            }
+            QHeaderView::section {
+                background-color: #0077c8;
+                color: #ffffff;
+                border: none;
+                padding: 8px;
+                font-weight: bold;
+            }
+        """)
+        layout.addWidget(self.table_subs)
+
+        self.load_substitutions()
+
+    def update_period_placeholder(self, text):
+        val = text.strip()
+        if val in ["11", "12"]:
+            self.sub_period.setPlaceholderText("Period (1-9)")
+        else:
+            self.sub_period.setPlaceholderText("Period (1-8)")
+
+    def add_substitution(self):
+        c = self.sub_class.text().strip()
+        s = self.sub_sec.text().strip()
+        p = self.sub_period.text().strip()
+        abs_t = self.sub_absent.text().strip()
+        sub_t = self.sub_substitute.text().strip()
+
+        if not (c and s and p and sub_t):
+            QMessageBox.warning(self, "Warning", "Please fill in required substitution fields.")
+            return
+
+        sub_obj = {
+            "class": c,
+            "section": s,
+            "period": p,
+            "absent": abs_t,
+            "substitute": sub_t,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+
+        data = self.read_data()
+        if "substitutions" not in data:
+            data["substitutions"] = []
+        data["substitutions"].append(sub_obj)
+        self.save_data(data)
+
+        for inp in [self.sub_class, self.sub_sec, self.sub_period, self.sub_absent, self.sub_substitute]:
+            inp.clear()
+
+        self.load_substitutions()
+
+    def load_substitutions(self):
+        data = self.read_data()
+        subs = [s for s in data.get("substitutions", []) if is_recent(s.get("timestamp"))]
+
+        data["substitutions"] = subs
+        self.save_data(data)
+
+        self.table_subs.setRowCount(len(subs))
+
+        for row, s in enumerate(subs):
+            dt_obj = parse_iso_timestamp(s.get("timestamp"))
+            time_display = dt_obj.strftime("%b %d, %I:%M %p") if dt_obj else "Recently"
+
+            self.table_subs.setItem(row, 0, QTableWidgetItem(str(s.get("class", ""))))
+            self.table_subs.setItem(row, 1, QTableWidgetItem(str(s.get("section", ""))))
+            self.table_subs.setItem(row, 2, QTableWidgetItem(str(s.get("period", ""))))
+            self.table_subs.setItem(row, 3, QTableWidgetItem(s.get("absent", "")))
+            self.table_subs.setItem(row, 4, QTableWidgetItem(s.get("substitute", "")))
+            self.table_subs.setItem(row, 5, QTableWidgetItem(time_display))
+
+            btn_del = QPushButton("Delete")
+            btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_del.setStyleSheet("background-color: #e74c3c; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-weight: bold;")
+            btn_del.clicked.connect(lambda _, r=row: self.delete_substitution(r))
+            self.table_subs.setCellWidget(row, 6, btn_del)
+
+    def delete_substitution(self, row_idx):
+        data = self.read_data()
+        if "substitutions" in data and row_idx < len(data["substitutions"]):
+            data["substitutions"].pop(row_idx)
+            self.save_data(data)
+            self.load_substitutions()
+
+    def open_help_page(self):
+        help_page_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "help.py")
+        if os.path.exists(help_page_path):
+            subprocess.Popen([sys.executable, help_page_path], cwd=os.path.dirname(help_page_path))
+        else:
+            QMessageBox.warning(self, "Help File Missing", "Could not find help.py in the current directory.")
+
+    def exit_to_adminpage(self):
+        admin_page_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adminpage.py")
+        if os.path.exists(admin_page_path):
+            subprocess.Popen([sys.executable, admin_page_path, "--exited"], cwd=os.path.dirname(admin_page_path))
+        self.close()
+
+    def read_data(self):
+        if not os.path.exists(DATA_FILE):
+            return {}
         try:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            adminpage_path = os.path.join(base_dir, "adminpage.py")
-            subprocess.Popen([sys.executable, adminpage_path], cwd=base_dir)
-            QApplication.quit()
-        except Exception as e:
-            print(f"Error launching adminpage.py: {e}")
+            with open(DATA_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def save_data(self, data):
+        with open(DATA_FILE, "w") as f:
+            json.dump(data, f, indent=4)
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
-    app.setStyle("Fusion")
-    font = QFont("Segoe UI", 10)
-    font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
-    app.setFont(font)
-
-    app.setStyleSheet("""
-        QComboBox QAbstractItemView {
-            background-color: #FFFFFF;
-            color: #0F172A;
-            selection-background-color: #E0F2FE;
-            selection-color: #0369A1;
-            border: 1px solid #BAE6FD;
-            outline: none;
-            padding: 4px;
-        }
-    """)
-
     window = AdminPanel()
     window.show()
     sys.exit(app.exec())
