@@ -1,47 +1,225 @@
-# student panel - test.py
 import sys
 import os
 import subprocess
 import datetime
 import json
+import re
+import math
+import random
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QPushButton, QMessageBox
+    QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QPushButton, 
+    QMessageBox, QDialog, QScrollArea
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QTime
-from PyQt6.QtGui import QFont
-from database import process_scan 
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QTime, QUrl, QPointF
+from PyQt6.QtGui import QFont, QDesktopServices, QPainter, QPainterPath, QColor, QBrush, QPen
 
+try:
+    from database import process_scan
+except ImportError:
+    def process_scan(code): pass
+
+DATA_FILE = "data.json"
+EXPIRATION_HOURS = 12
+
+def parse_iso_timestamp(ts_str):
+    if not ts_str:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(ts_str)
+    except Exception:
+        return None
+
+def is_recent(ts_str, max_hours=EXPIRATION_HOURS):
+    dt = parse_iso_timestamp(ts_str)
+    if not dt:
+        return True
+    now = datetime.datetime.now()
+    return (now - dt).total_seconds() < (max_hours * 3600)
+
+class BubbleParticle:
+    """Represents a single glowing animated floating bubble."""
+    def __init__(self, w, h):
+        self.reset(w, h, initial=True)
+        
+    def reset(self, w, h, initial=False):
+        self.x = random.uniform(0, max(1, w))
+        self.y = random.uniform(0, max(1, h)) if initial else h + random.uniform(10, 50)
+        self.radius = random.uniform(12, 45)
+        self.speed = random.uniform(0.4, 1.2)
+        self.drift = random.uniform(-0.3, 0.3)
+        self.alpha = random.randint(40, 110)
+        colors = ["#38BDF8", "#0284C7", "#7DD3FC", "#0EA5E9", "#BAE6FD"]
+        self.color = QColor(random.choice(colors))
+        self.color.setAlpha(self.alpha)
+        
+    def move(self, w, h):
+        self.y -= self.speed
+        self.x += math.sin(self.y * 0.02) * 0.4 + self.drift
+        if self.y < -self.radius * 2:
+            self.reset(w, h, initial=False)
+
+class AnimatedBubbleBackground(QWidget):
+    """Dynamic background filled with floating light-blue glowing bubbles."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.bubbles = []
+        self.num_bubbles = 35
+        self.animation_timer = QTimer(self)
+        self.animation_timer.timeout.connect(self.animate)
+        self.animation_timer.start(25)
+        
+    def resizeEvent(self, event):
+        w, h = self.width(), self.height()
+        if not self.bubbles:
+            self.bubbles = [BubbleParticle(w, h) for _ in range(self.num_bubbles)]
+        super().resizeEvent(event)
+        
+    def animate(self):
+        w, h = self.width(), self.height()
+        for b in self.bubbles:
+            b.move(w, h)
+        self.update()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+        painter.fillRect(0, 0, w, h, QColor("#E0F2FE"))
+        for b in self.bubbles:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(b.color))
+            painter.drawEllipse(QPointF(b.x, b.y), b.radius, b.radius)
 
 class BarcodeListenerThread(QThread):
     scan_received = pyqtSignal(str)
-
+    
     def run(self):
-        print("==================================================")
-        print(" Smartboard Barcode Attendance Listener (Active) ")
-        print("==================================================")
-        print("Listening for scans... (Press Ctrl+C to stop)\n")
-
         while True:
             try:
                 scanned_code = sys.stdin.readline().strip()
                 if scanned_code:
                     process_scan(scanned_code)
                     self.scan_received.emit(scanned_code)
-            except (KeyboardInterrupt, Exception):
-                print("\nShutting down attendance listener.")
+            except Exception:
                 break
 
+class NoticeCard(QFrame):
+    def __init__(self, notice_data, parent=None):
+        super().__init__(parent)
+        self.notice_data = notice_data
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setStyleSheet("""
+            QFrame {
+                background-color: rgba(255, 255, 255, 0.92);
+                border-radius: 12px;
+                border: 1px solid #7DD3FC;
+            }
+        """)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(10)
+        
+        target = self.notice_data.get("target", "All")
+        title = self.notice_data.get("title", "Untitled Announcement")
+        header_lbl = QLabel(f"[{target}] {title}")
+        header_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        header_lbl.setWordWrap(True)
+        header_lbl.setStyleSheet("color: #0369A1; border: none; background: transparent;")
+        layout.addWidget(header_lbl)
+        
+        content = self.notice_data.get("content", "").strip()
+        if content:
+            body_lbl = QLabel(content)
+            body_lbl.setFont(QFont("Segoe UI", 11))
+            body_lbl.setWordWrap(True)
+            body_lbl.setStyleSheet("color: #334155; border: none; background: transparent;")
+            layout.addWidget(body_lbl)
+            
+        pdf_path = self.notice_data.get("pdf")
+        if pdf_path and os.path.exists(pdf_path):
+            pdf_btn = QPushButton(f"Attachment: {os.path.basename(pdf_path)}")
+            pdf_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            pdf_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #0284C7;
+                    color: #FFFFFF;
+                    border-radius: 6px;
+                    padding: 8px 14px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background-color: #0369A1;
+                }
+            """)
+            pdf_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(pdf_path)))
+            layout.addWidget(pdf_btn)
+            
+        ts_str = self.notice_data.get("timestamp", "")
+        dt_obj = parse_iso_timestamp(ts_str)
+        time_display = dt_obj.strftime("%b %d, %Y - %I:%M %p") if dt_obj else "Recently"
+        ts_lbl = QLabel(f"Posted: {time_display}")
+        ts_lbl.setFont(QFont("Segoe UI", 10))
+        ts_lbl.setStyleSheet("color: #64748B; border: none; background: transparent;")
+        layout.addWidget(ts_lbl)
+
+class NotificationDialog(QDialog):
+    def __init__(self, notices, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Official Bulletins & Notices")
+        self.resize(620, 550)
+        self.setStyleSheet("background-color: #E0F2FE; font-family: 'Segoe UI', sans-serif;")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setSpacing(16)
+        
+        title_label = QLabel("Official Bulletins & Notices")
+        title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        title_label.setStyleSheet("color: #0284C7; background: transparent;")
+        layout.addWidget(title_label)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        cards_layout = QVBoxLayout(container)
+        cards_layout.setContentsMargins(0, 0, 0, 0)
+        cards_layout.setSpacing(14)
+        
+        if not notices:
+            empty_lbl = QLabel("No active bulletins present for this class.")
+            empty_lbl.setStyleSheet("color: #64748B; font-size: 13px;")
+            cards_layout.addWidget(empty_lbl)
+        else:
+            for n in notices:
+                cards_layout.addWidget(NoticeCard(n))
+        cards_layout.addStretch()
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
 
 class ClassroomDashboard(QWidget):
     def __init__(self, current_class_name="Class 6 A"):
         super().__init__()
-        
-        # Display selected class name in top left
         self.selected_class_name = current_class_name
-
-        # Schedule structure with start/end QTime objects for evaluation
-        self.full_schedule_structure = [
+        self.current_notices = []
+        self.seen_notices_count = 0  # Tracks viewed notices
+        
+        match = re.search(r"Class\s+(\d+)\s+([A-D])", current_class_name)
+        if match:
+            self.class_num = int(match.group(1))
+            self.section_letter = match.group(2)
+        else:
+            self.class_num = 6
+            self.section_letter = "A"
+            
+        # Base 8 periods schedule structure for Grades 6 - 10
+        self.full_schedule_structure = [ 
             ("1", "10:15 AM - 11:00 AM", QTime(10, 15), QTime(11, 0), False, 1),
             ("2", "11:00 AM - 11:40 AM", QTime(11, 0), QTime(11, 40), False, 2),
             ("-", "11:40 AM - 11:45 AM", QTime(11, 40), QTime(11, 45), True, None),
@@ -54,194 +232,193 @@ class ClassroomDashboard(QWidget):
             ("7", "03:10 PM - 03:50 PM", QTime(15, 10), QTime(15, 50), False, 7),
             ("8", "03:50 PM - 04:30 PM", QTime(15, 50), QTime(16, 30), False, 8),
         ]
-
-        # Master Routine Matrix
+        
+        # Add 9th period (04:30 PM to 05:10 PM) dynamically for Grades 11 and 12
+        if self.class_num >= 11:
+            self.full_schedule_structure.append(
+                ("9", "04:30 PM - 05:10 PM", QTime(16, 30), QTime(17, 10), False, 9)
+            )
+            
         self.all_routines = {
             # --- CLASS 6 ---
             "Class 6 A": {
-                1: {1: ("English", "DRG"), 2: ("Maths", "IPG"), 3: ("Science", "YS"), 4: ("Social", "TPK"), 5: ("Nepali", "SRG")},
-                2: {1: ("Maths", "IPG"), 2: ("English", "DRG"), 3: ("Nepali", "SRG"), 4: ("Science", "YS"), 5: ("Computer", "PL")},
-                3: {1: ("Science", "YS"), 2: ("Nepali", "SRG"), 3: ("English", "DRG"), 4: ("Maths", "IPG"), 5: ("Social", "TPK")},
-                4: {1: ("Social", "TPK"), 2: ("Science", "YS"), 3: ("Maths", "IPG"), 4: ("English", "DRG"), 5: ("Local Cu.", "TNS")},
-                5: {1: ("Nepali", "SRG"), 2: ("Local Cu.", "TNS"), 3: ("Computer", "PL"), 4: ("Science", "YS"), 5: ("English", "DRG")},
-                6: {1: ("Computer", "PL"), 2: ("Social", "TPK"), 3: ("Local Cu.", "TNS"), 4: ("Maths", "IPG"), 5: ("Nepali", "SPG")},
+                1: {},
+                2: {1: ("English", "SP"), 2: ("Science", "YS"), 3: ("Maths", "GB"), 4: ("Social", "MB"), 5: ("English II", "BSP"), 6: ("Nepali", "SRP"), 7: ("Computer", "PL"), 8: ("HPE", "DN")},
+                3: {1: ("English", "SP"), 2: ("Science", "YS"), 3: ("Nepali", "SRP"), 4: ("English II", "BSP"), 5: ("Social", "MB"), 6: ("Nepali", "SPG"), 7: ("Computer", "PL"), 8: ("Maths", "GB")},
+                4: {1: ("English", "SP"), 2: ("Science", "YS"), 3: ("Nepali", "SRP"), 4: ("Music", "RBJ"), 5: ("Social", "MB"), 6: ("Maths", "GB"), 7: ("Maths", "GB"), 8: ("Computer", "PL")},
+                5: {1: ("English", "SP"), 2: ("Science", "YS"), 3: ("Science", "YS"), 4: ("Social", "MB"), 5: ("English II", "BSP"), 6: ("Nepali", "SPG"), 7: ("HPE", "DN"), 8: ("Maths", "GB")},
+                6: {1: ("English", "SP"), 2: ("Science", "YS"), 3: ("Drama", "RBT"), 4: ("Arts", "HKG"), 5: ("Social", "MB"), 6: ("Nepali", "SRP"), 7: ("HPE", "DN"), 8: ("Maths", "GB")},
                 7: {}
             },
             "Class 6 B": {
-                1: {1: ("Maths", "IPG"), 2: ("English", "DRG"), 3: ("Nepali", "SRG"), 4: ("Science", "YS"), 5: ("Social", "TPK")},
-                2: {1: ("English", "DRG"), 2: ("Science", "YS"), 3: ("Maths", "IPG"), 4: ("Computer", "PL"), 5: ("Nepali", "SRG")},
-                3: {1: ("Nepali", "SRG"), 2: ("Maths", "IPG"), 3: ("Science", "YS"), 4: ("Social", "TPK"), 5: ("English", "DRG")},
-                4: {1: ("Science", "YS"), 2: ("English", "DRG"), 3: ("Social", "TPK"), 4: ("Local Cu.", "TNS"), 5: ("Maths", "IPG")},
-                5: {1: ("Local Cu.", "TNS"), 2: ("Nepali", "SRG"), 3: ("Science", "YS"), 4: ("English", "DRG"), 5: ("Computer", "PL")},
-                6: {1: ("Social", "TPK"), 2: ("Computer", "PL"), 3: ("Maths", "IPG"), 4: ("Nepali", "SPG"), 5: ("Local Cu.", "TNS")},
+                1: {},
+                2: {1: ("Social", "MB"), 2: ("English", "SP"), 3: ("HPE", "DN"), 4: ("Maths", "GB"), 5: ("Computer", "PL"), 6: ("English II", "SS"), 7: ("Nepali", "SPG"), 8: ("Science", "PG")},
+                3: {1: ("Social", "MB"), 2: ("English", "SP"), 3: ("Maths", "GB"), 4: ("Maths", "GB"), 5: ("Science", "PG"), 6: ("Science", "PG"), 7: ("English", "SS"), 8: ("Nepali", "SK")},
+                4: {1: ("Social", "MB"), 2: ("English", "SP"), 3: ("HPE", "DN"), 4: ("Maths", "GB"), 5: ("Science", "PG"), 6: ("Computer", "PL"), 7: ("English", "SS"), 8: ("Nepali", "SK")},
+                5: {1: ("Social", "MB"), 2: ("English", "SP"), 3: ("Music", "RBJ"), 4: ("Maths", "GB"), 5: ("Computer", "PL"), 6: ("Nepali", "SK"), 7: ("Arts", "HKG"), 8: ("Science", "PG")},
+                6: {1: ("Social", "MB"), 2: ("English", "SP"), 3: ("Maths", "GB"), 4: ("Drama", "RBT"), 5: ("HPE", "DN"), 6: ("Nepali", "SK"), 7: ("Nepali", "SPG"), 8: ("Science", "PG")},
                 7: {}
             },
-
             # --- CLASS 7 ---
             "Class 7 A": {
-                1: {1: ("Nepali", "SRG"), 2: ("English", "DRG"), 3: ("Maths", "IPG"), 4: ("Science", "YS"), 5: ("Social", "TPK")},
-                2: {1: ("English", "DRG"), 2: ("Maths", "IPG"), 3: ("Science", "YS"), 4: ("Nepali", "SRG"), 5: ("Computer", "PL")},
-                3: {1: ("Maths", "IPG"), 2: ("Science", "YS"), 3: ("Social", "TPK"), 4: ("English", "DRG"), 5: ("Local Cu.", "TNS")},
-                4: {1: ("Science", "YS"), 2: ("Nepali", "SRG"), 3: ("Computer", "PL"), 4: ("Maths", "IPG"), 5: ("Social", "TPK")},
-                5: {1: ("Social", "TPK"), 2: ("Computer", "PL"), 3: ("English", "DRG"), 4: ("Local Cu.", "TNS"), 5: ("Nepali", "SPG")},
-                6: {1: ("Local Cu.", "TNS"), 2: ("Social", "TPK"), 3: ("Nepali", "SRG"), 4: ("Science", "YS"), 5: ("Maths", "IPG")},
+                1: {},
+                2: {1: ("Nepali", "SPG"), 2: ("English", "BSP"), 3: ("English II", "SS"), 4: ("Science", "YS"), 5: ("Social", "TPK"), 6: ("HPE", "DN"), 7: ("Maths", "GB"), 8: ("Maths", "GB")},
+                3: {1: ("Nepali", "SPG"), 2: ("Nepali", "SPG"), 3: ("Computer", "PL"), 4: ("Science", "YS"), 5: ("Social", "TPK"), 6: ("Maths", "GB"), 7: ("HPE", "DN"), 8: ("English", "BSP")},
+                4: {1: ("Nepali", "SPG"), 2: ("Maths", "GB"), 3: ("English II", "SS"), 4: ("Science", "YS"), 5: ("Social", "TPK"), 6: ("HPE", "DN"), 7: ("Arts", "HKG"), 8: ("English", "BSP")},
+                5: {1: ("Nepali", "SPG"), 2: ("Science", "PG"), 3: ("Computer", "PL"), 4: ("Music", "RBJ"), 5: ("Social", "TPK"), 6: ("Maths", "GB"), 7: ("English II", "SS"), 8: ("English", "BSP")},
+                6: {1: ("Nepali", "SPG"), 2: ("Science", "PG"), 3: ("English", "BSP"), 4: ("Science", "YS"), 5: ("Drama", "RBT"), 6: ("Maths", "GB"), 7: ("Computer", "PL"), 8: ("Social", "TPK")},
                 7: {}
             },
             "Class 7 B": {
-                1: {1: ("Science", "YS"), 2: ("Maths", "IPG"), 3: ("English", "DRG"), 4: ("Nepali", "SRG"), 5: ("Social", "TPK")},
-                2: {1: ("Nepali", "SRG"), 2: ("Social", "TPK"), 3: ("Computer", "PL"), 4: ("Science", "YS"), 5: ("English", "DRG")},
-                3: {1: ("English", "DRG"), 2: ("Local Cu.", "TNS"), 3: ("Maths", "IPG"), 4: ("Science", "YS"), 5: ("Nepali", "SRG")},
-                4: {1: ("Maths", "IPG"), 2: ("Science", "YS"), 3: ("Social", "TPK"), 4: ("English", "DRG"), 5: ("Computer", "PL")},
-                5: {1: ("Computer", "PL"), 2: ("English", "DRG"), 3: ("Nepali", "SPG"), 4: ("Local Cu.", "TNS"), 5: ("Social", "TPK")},
-                6: {1: ("Social", "TPK"), 2: ("Nepali", "SRG"), 3: ("Science", "YS"), 4: ("Maths", "IPG"), 5: ("Local Cu.", "TNS")},
+                1: {},
+                2: {1: ("Science", "SM"), 2: ("Science", "SM"), 3: ("Nepali", "SK"), 4: ("Maths", "DRP"), 5: ("HPE", "DN"), 6: ("English", "SP"), 7: ("Social", "TNS"), 8: ("English II", "SS")},
+                3: {1: ("Science", "SM"), 2: ("Maths", "DRP"), 3: ("Maths", "DRP"), 4: ("English", "SP"), 5: ("Nepali", "SK"), 6: ("Nepali", "SK"), 7: ("Social", "TNS"), 8: ("Computer", "PL")},
+                4: {1: ("Science", "SM"), 2: ("Music", "RBJ"), 3: ("Nepali", "SK"), 4: ("Maths", "DRP"), 5: ("English II", "SS"), 6: ("English", "SP"), 7: ("Social", "TNS"), 8: ("Nepali", "SPG")},
+                5: {1: ("Science", "SM"), 2: ("HPE", "DN"), 3: ("Nepali", "SK"), 4: ("Maths", "DRP"), 5: ("Arts", "HKG"), 6: ("English", "SP"), 7: ("Social", "TNS"), 8: ("Computer", "PL")},
+                6: {1: ("Science", "SM"), 2: ("Nepali", "SK"), 3: ("Computer", "PL"), 4: ("English II", "SS"), 5: ("Maths", "DRP"), 6: ("Drama", "RBT"), 7: ("Social", "TNS"), 8: ("English", "SP")},
                 7: {}
             },
-
             # --- CLASS 8 ---
             "Class 8 A": {
-                1: {1: ("Maths", "IPG"), 2: ("Science", "YS"), 3: ("English", "DRG"), 4: ("Nepali", "SRG"), 5: ("Social", "TPK")},
-                2: {1: ("Science", "YS"), 2: ("Nepali", "SRG"), 3: ("Social", "TPK"), 4: ("English", "DRG"), 5: ("Maths", "IPG")},
-                3: {1: ("English", "DRG"), 2: ("Social", "TPK"), 3: ("Computer", "PL"), 4: ("Science", "YS"), 5: ("Local Cu.", "TNS")},
-                4: {1: ("Nepali", "SRG"), 2: ("Computer", "PL"), 3: ("Maths", "IPG"), 4: ("Social", "TPK"), 5: ("English", "DRG")},
-                5: {1: ("Computer", "PL"), 2: ("Maths", "IPG"), 3: ("Science", "YS"), 4: ("Local Cu.", "TNS"), 5: ("Nepali", "SPG")},
-                6: {1: ("Social", "TPK"), 2: ("Local Cu.", "TNS"), 3: ("English", "DRG"), 4: ("Nepali", "SRG"), 5: ("Science", "YS")},
+                1: {},
+                2: {1: ("Maths", "GB"), 2: ("Nepali", "SPG"), 3: ("Health", "SD"), 4: ("Science", "SM"), 5: ("Local Cu", "TNS"), 6: ("Social", "TPK"), 7: ("English", "BSP"), 8: ("Local Cu", "PL")},
+                3: {1: ("Maths", "GB"), 2: ("Science", "PG"), 3: ("English", "BSP"), 4: ("Science", "SM"), 5: ("English II", "SS"), 6: ("Social", "TPK"), 7: ("Health", "SD"), 8: ("Nepali", "SPG")},
+                4: {1: ("Maths", "GB"), 2: ("Science", "PG"), 3: ("Music", "RBJ"), 4: ("Social", "TPK"), 5: ("Computer", "PL"), 6: ("Local Cu", "TNS"), 7: ("English", "BSP"), 8: ("Nepali", "SPG")},
+                5: {1: ("Maths", "GB"), 2: ("Maths", "GB"), 3: ("English", "BSP"), 4: ("Science", "SM"), 5: ("English II", "SS"), 6: ("Social", "TPK"), 7: ("Health", "SD"), 8: ("Nepali", "SPG")},
+                6: {1: ("Maths", "GB"), 2: ("Drama", "RBT"), 3: ("PE", "DN"), 4: ("Social", "TPK"), 5: ("Science", "PG"), 6: ("Nepali", "SPG"), 7: ("English", "BSP"), 8: ("English II", "SS")},
                 7: {}
             },
             "Class 8 B": {
-                1: {1: ("English", "DRG"), 2: ("Nepali", "SRG"), 3: ("Maths", "IPG"), 4: ("Science", "YS"), 5: ("Computer", "PL")},
-                2: {1: ("Maths", "IPG"), 2: ("Social", "TPK"), 3: ("English", "DRG"), 4: ("Nepali", "SRG"), 5: ("Science", "YS")},
-                3: {1: ("Science", "YS"), 2: ("Computer", "PL"), 3: ("Local Cu.", "TNS"), 4: ("Maths", "IPG"), 5: ("Social", "TPK")},
-                4: {1: ("Social", "TPK"), 2: ("English", "DRG"), 3: ("Science", "YS"), 4: ("Computer", "PL"), 5: ("Nepali", "SRG")},
-                5: {1: ("Nepali", "SRG"), 2: ("Science", "YS"), 3: ("Maths", "IPG"), 4: ("English", "DRG"), 5: ("Local Cu.", "TNS")},
-                6: {1: ("Local Cu.", "TNS"), 2: ("Maths", "IPG"), 3: ("Nepali", "SPG"), 4: ("Social", "TPK"), 5: ("English", "DRG")},
+                1: {},
+                2: {1: ("Social", "TNS"), 2: ("PE", "DN"), 3: ("Music", "RBJ"), 4: ("Science", "PG"), 5: ("Nepali", "SK"), 6: ("Maths", "NA"), 7: ("English", "SP"), 8: ("Local Cu", "TPK")},
+                3: {1: ("Social", "TNS"), 2: ("Health", "SD"), 3: ("Science", "PG"), 4: ("Nepali", "SK"), 5: ("Maths", "DRP"), 6: ("English II", "BSP"), 7: ("English", "SP"), 8: ("Local Cu", "TPK")},
+                4: {1: ("Social", "TNS"), 2: ("Local Cu", "PL"), 3: ("Science", "PG"), 4: ("Nepali", "SK"), 5: ("English II", "BSP"), 6: ("Maths", "NA"), 7: ("English", "SP"), 8: ("Math", "DRP")},
+                5: {1: ("Social", "TNS"), 2: ("Local Cu", "PL"), 3: ("Science", "PG"), 4: ("English", "DRG"), 5: ("Nepali", "SK"), 6: ("Health", "SD"), 7: ("Computer", "PL"), 8: ("Math", "DRP")},
+                6: {1: ("Social", "TNS"), 2: ("Health", "SD"), 3: ("Science", "PG"), 4: ("English", "SP"), 5: ("Nepali", "SK"), 6: ("English II", "BSP"), 7: ("Drama", "RBT"), 8: ("Math", "DRP")},
                 7: {}
             },
-
             # --- CLASS 9 ---
             "Class 9 A": {
-                1: {1: ("English", "DRG"), 2: ("Maths", "IPG"), 3: ("Science", "PA"), 4: ("Nepali", "SRG"), 5: ("Opt. Maths", "BK")},
-                2: {1: ("Maths", "IPG"), 2: ("Science", "PA"), 3: ("Nepali", "SRG"), 4: ("Social", "TPK"), 5: ("English", "DRG")},
-                3: {1: ("Science", "PA"), 2: ("Nepali", "SRG"), 3: ("Opt. Maths", "BK"), 4: ("English", "DRG"), 5: ("Computer", "PL")},
-                4: {1: ("Nepali", "SRG"), 2: ("Social", "TPK"), 3: ("English", "DRG"), 4: ("Science", "PA"), 5: ("Maths", "IPG")},
-                5: {1: ("Social", "TPK"), 2: ("English", "DRG"), 3: ("Maths", "IPG"), 4: ("Opt. Maths", "BK"), 5: ("Nepali", "SPG")},
-                6: {1: ("Opt. Maths", "BK"), 2: ("Computer", "PL"), 3: ("Social", "TPK"), 4: ("Maths", "IPG"), 5: ("Science", "PA")},
+                1: {},
+                2: {1: ("Maths", "NA"), 2: ("Science", "PA"), 3: ("Social", "TPK"), 4: ("Nepali", "SPG"), 5: ("English", "DRG"), 6: ("English", "DRG"), 7: ("Computer, Account", "PKC, HD"), 8: ("Opt.Math, Economics", "LBR,YS")},
+                3: {1: ("Maths", "NA"), 2: ("Science", "PA"), 3: ("Social", "TPK"), 4: ("Nepali", "SPG"), 5: ("Maths", "IPG"), 6: ("English", "DRG"), 7: ("Computer, Account", "PKC, HD"), 8: ("Opt.Math, Economics", "LBR,YS")},
+                4: {1: ("Maths", "NA"), 2: ("English", "DRG"), 3: ("Nepali", "SPG"), 4: ("Nepali", "SPG"), 5: ("Science", "YS"), 6: ("Social", "TPK"), 7: ("Computer, Account", "PKC, HD"), 8: ("Opt.Math, Economics", "LBR,YS")},
+                5: {1: ("Maths", "NA"), 2: ("English", "DRG"), 3: ("Social", "TPK"), 4: ("Nepali", "SPG"), 5: ("Science", "YS"), 6: ("Science", "PA"), 7: ("Computer, Account", "KKC, HD"), 8: ("Opt.Math, Economics", "LBR,YS")},
+                6: {1: ("Maths", "NA"), 2: ("English", "DRG"), 3: ("Science", "PA"), 4: ("Nepali", "SPG"), 5: ("Social", "TPK"), 6: ("Social", "TPK"), 7: ("Computer, Account", "KKC, HD"), 8: ("Opt.Math, Economics", "LBR,YS")},
                 7: {}
             },
             "Class 9 B": {
-                1: {1: ("Science", "PA"), 2: ("Opt. Maths", "BK"), 3: ("English", "DRG"), 4: ("Maths", "IPG"), 5: ("Nepali", "SRG")},
-                2: {1: ("English", "DRG"), 2: ("Nepali", "SRG"), 3: ("Maths", "IPG"), 4: ("Opt. Maths", "BK"), 5: ("Social", "TPK")},
-                3: {1: ("Maths", "IPG"), 2: ("Social", "TPK"), 3: ("Science", "PA"), 4: ("Computer", "PL"), 5: ("English", "DRG")},
-                4: {1: ("Opt. Maths", "BK"), 2: ("Science", "PA"), 3: ("Nepali", "SRG"), 4: ("English", "DRG"), 5: ("Social", "TPK")},
-                5: {1: ("Nepali", "SRG"), 2: ("Maths", "IPG"), 3: ("Social", "TPK"), 4: ("Science", "PA"), 5: ("Computer", "PL")},
-                6: {1: ("Computer", "PL"), 2: ("English", "DRG"), 3: ("Opt. Maths", "BK"), 4: ("Nepali", "SPG"), 5: ("Maths", "IPG")},
+                1: {},
+                2: {1: ("English", "PRT"), 2: ("English", "PRT"), 3: ("Maths", "NA"), 4: ("Social", "TNS"), 5: ("Nepali", "KK"), 6: ("Science", "SM"), 7: ("Computer, Account", "KKC, HD"), 8: ("Opt.Math, Economics", "NA,YS")},
+                3: {1: ("English", "PRT"), 2: ("Nepali", "KK"), 3: ("Maths", "NA"), 4: ("Maths", "NA"), 5: ("Social", "TNS"), 6: ("Science", "SD"), 7: ("Computer, Account", "KKC, HD"), 8: ("Opt.Math, Economics", "NA,YS")},
+                4: {1: ("English", "PRT"), 2: ("Nepali", "KK"), 3: ("Science", "SD"), 4: ("Social", "TNS"), 5: ("Maths", "NA"), 6: ("Science", "SM"), 7: ("Computer, Account", "KKC, HD"), 8: ("Opt.Math, Economics", "NA,YS")},
+                5: {1: ("English", "PRT"), 2: ("Nepali", "KK"), 3: ("Social", "TNS"), 4: ("Social", "TNS"), 5: ("Maths", "NA"), 6: ("Science", "SM"), 7: ("Computer, Account", "PKC, HD"), 8: ("Opt.Math, Economics", "NA,YS")},
+                6: {1: ("English", "PRT"), 2: ("Nepali", "KK"), 3: ("Nepali", "KK"), 4: ("Social", "TNS"), 5: ("Maths", "NA"), 6: ("Science", "SD"), 7: ("Computer, Account", "PKC, HD"), 8: ("Opt.Math, Economics", "NA,YS")},
                 7: {}
             },
-
             # --- CLASS 10 ---
             "Class 10 A": {
-                1: {2: ("English", "DRG"), 3: ("Nepali", "SRG"), 4: ("Nepali", "SRG"), 5: ("Nepali", "SRG"), 6: ("Nepali", "SPG")},
-                2: {1: ("English", "DRG"), 2: ("English", "DRG"), 3: ("Nepali", "SRG"), 4: ("Nepali", "SRG"), 5: ("Nepali", "SRG"), 6: ("Nepali", "SPG")},
-                3: {2: ("English", "DRG"), 3: ("Nepali", "SRG"), 4: ("Nepali", "SRG"), 5: ("Nepali", "SRG"), 6: ("Nepali", "SPG")},
-                4: {2: ("English", "DRG"), 3: ("English", "DRG"), 4: ("Social", "TPK"), 5: ("Science", "PA"), 6: ("Social", "TPK")},
-                5: {2: ("Local Cu.", "TNS"), 3: ("English II", "SS"), 4: ("Computer", "PL"), 5: ("English II", "SS"), 6: ("Science", "PG")},
-                6: {2: ("Social", "TPK"), 3: ("Social", "TPK"), 4: ("Local Cu.", "TNS"), 6: ("Nepali", "SPG")},
+                1: {},
+                2: {1: ("English", "DRG"), 2: ("English", "DRG"), 3: ("Social", "TNS"), 4: ("Maths", "NA"), 5: ("Nepali", "SPG"), 6: ("Science", "TRS"), 7: ("Opt.Math, Economics", "IPG,YS"), 8: ("Computer, Account", "PKC, HD")},
+                3: {1: ("English", "DRG"), 2: ("Nepali", "SRG"), 3: ("Social", "TNS"), 4: ("Social", "TNS"), 5: ("Science", "YS"), 6: ("Maths", "NA"), 7: ("Opt.Math, Economics", "IPG,YS"), 8: ("Computer, Account", "PKC, HD")},
+                4: {1: ("English", "DRG"), 2: ("Nepali", "SRG"), 3: ("Social", "TNS"), 4: ("Maths", "NA"), 5: ("Nepali", "SPG"), 6: ("Science", "TRS"), 7: ("Opt.Math, Economics", "IPG,YS"), 8: ("Computer, Account", "PKC, HD")},
+                5: {1: ("English", "DRG"), 2: ("Nepali", "SRG"), 3: ("Maths", "NA"), 4: ("Maths", "NA"), 5: ("Social", "TNS"), 6: ("Science", "TRS"), 7: ("Opt.Math, Economics", "IPG,YS"), 8: ("Computer, Account", "KKC, HD")},
+                6: {1: ("English", "DRG"), 2: ("Nepali", "SPG"), 3: ("Social", "TNS"), 4: ("Maths", "NA"), 5: ("Science", "YS"), 6: ("Science", "TRS"), 7: ("Opt.Math, Economics", "IPG,YS"), 8: ("Computer, Account", "KKC, HD")},
                 7: {}
             },
             "Class 10 B": {
-                1: {1: ("Science", "PA"), 2: ("English", "DRG"), 3: ("Nepali", "SRG"), 4: ("Social", "TPK"), 5: ("Local Cu.", "TNS")},
-                2: {1: ("Nepali", "SRG"), 2: ("Maths", "IPG"), 3: ("English", "DRG"), 4: ("Computer", "PL"), 5: ("Science", "PA")},
-                3: {1: ("Social", "TPK"), 2: ("Nepali", "SRG"), 3: ("Science", "PA"), 4: ("English II", "SS"), 5: ("Maths", "IPG")},
-                4: {1: ("Maths", "IPG"), 2: ("Local Cu.", "TNS"), 3: ("Social", "TPK"), 4: ("Nepali", "SRG"), 5: ("English", "DRG")},
-                5: {1: ("English II", "SS"), 2: ("Computer", "PL"), 3: ("Maths", "IPG"), 4: ("Science", "PG"), 5: ("Social", "TPK")},
-                6: {1: ("Computer", "PL"), 2: ("Science", "PA"), 3: ("English", "DRG"), 4: ("Maths", "IPG"), 5: ("Nepali", "SPG")},
+                1: {},
+                2: {1: ("Social", "TPK"), 2: ("Nepali", "SRG"), 3: ("Nepali", "KK"), 4: ("Maths", "IPG"), 5: ("English", "PRT"), 6: ("Science", "PG"), 7: ("Opt.Math, Economics", "LBR,YS"), 8: ("Computer, Account", "KKC, HD")},
+                3: {1: ("Social", "TPK"), 2: ("Science", "SM"), 3: ("Nepali", "KK"), 4: ("Maths", "IPG"), 5: ("English", "PRT"), 6: ("English", "PRT"), 7: ("Opt.Math, Economics", "LBR,YS"), 8: ("Computer, Account", "KKC, HD")},
+                4: {1: ("Social", "TPK"), 2: ("Social", "TPK"), 3: ("English", "PRT"), 4: ("Maths", "LBR"), 5: ("Nepali", "KK"), 6: ("Science", "PG"), 7: ("Opt.Math, Economics", "LBR,YS"), 8: ("Computer, Account", "KKC, HD")},
+                5: {1: ("Social", "TPK"), 2: ("Science", "SM"), 3: ("Nepali", "KK"), 4: ("Maths", "IPG"), 5: ("English", "PRT"), 6: ("Science", "PG"), 7: ("Opt.Math, Economics", "LBR,YS"), 8: ("Computer, Account", "PKC, HD")},
+                6: {1: ("Social", "TPK"), 2: ("Nepali", "SRG"), 3: ("Maths", "LBR"), 4: ("English", "PRT"), 5: ("Maths", "IPG"), 6: ("Science", "PG"), 7: ("Opt.Math, Economics", "LBR,YS"), 8: ("Computer, Account", "PKC, HD")},
                 7: {}
             },
-
             # --- CLASS 11 ---
             "Class 11 A": {
-                1: {1: ("Physics", "RKB"), 2: ("Chemistry", "DNB"), 3: ("Mathematics", "IPG"), 4: ("English", "DRG"), 5: ("Biology", "KPS")},
-                2: {1: ("Chemistry", "DNB"), 2: ("Physics", "RKB"), 3: ("English", "DRG"), 4: ("Mathematics", "IPG"), 5: ("Computer Sci.", "PL")},
-                3: {1: ("Mathematics", "IPG"), 2: ("English", "DRG"), 3: ("Biology", "KPS"), 4: ("Physics", "RKB"), 5: ("Chemistry", "DNB")},
-                4: {1: ("English", "DRG"), 2: ("Biology", "KPS"), 3: ("Physics", "RKB"), 4: ("Chemistry", "DNB"), 5: ("Nepali", "SRG")},
-                5: {1: ("Computer Sci.", "PL"), 2: ("Mathematics", "IPG"), 3: ("Chemistry", "DNB"), 4: ("Physics", "RKB"), 5: ("Nepali", "SRG")},
-                6: {1: ("Nepali", "SRG"), 2: ("Physics Lab", "RKB"), 3: ("Chem Lab", "DNB"), 4: ("Bio Lab", "KPS"), 5: ("Mathematics", "IPG")},
+                1: {},
+                2: {1: ("PHy PR, Bot PR", "SB, SD"), 2: ("Maths", "LBR"), 3: ("Physics", "PA"), 4: ("Physics", "SB"), 5: ("Botany", "SD"), 6: ("Chemistry", "AP"), 7: ("Zoology", "SH"), 8: ("Maths", "KB"), 9: ("English", "BSB")},
+                3: {1: ("Botany", "SD"), 2: ("Chemistry", "PS"), 3: ("Maths", "IPG"), 4: ("English", "PRT"), 5: ("Nepali", "KK"), 6: ("Chemistry", "MK"), 7: ("Zoology", "SH"), 8: ("Maths", "KB"), 9: ("Physics", "TRS")},
+                4: {1: ("Che PR, PHy PR", "PS, SB"), 2: ("Botany", "SD"), 3: ("Maths", "LBR"), 4: ("Nepali", "KK"), 5: ("Maths", "IPG"), 6: ("Chemistry", "AP"), 7: ("Physics", "SB"), 8: ("English", "PRT"), 9: ("Physics", "PA")},
+                5: {1: ("Nepali", "SRG"), 2: ("Physics", "PA"), 3: ("Chemistry", "AP"), 4: ("Botany", "SD"), 5: ("Maths", "IPG"), 6: ("MCQ's", "GR"), 7: ("Physics", "SB"), 8: ("Nepali", "SRG"), 9: ("Zoology", "SH")},
+                6: {1: ("Zol PR, Che PR", "SH, PS"), 2: ("Chemistry", "PS"), 3: ("Physics", "TRS"), 4: ("Chemistry", "MK"), 5: ("Maths", "LBR"), 6: ("English", "BSB"), 7: ("Maths", "IPG"), 8: ("Nepali", "SRG"), 9: ("Physics", "PA")},
                 7: {}
             },
             "Class 11 B": {
-                1: {1: ("Chemistry", "DNB"), 2: ("Physics", "RKB"), 3: ("English", "DRG"), 4: ("Biology", "KPS"), 5: ("Mathematics", "IPG")},
-                2: {1: ("Physics", "RKB"), 2: ("Mathematics", "IPG"), 3: ("Chemistry", "DNB"), 4: ("Computer Sci.", "PL"), 5: ("English", "DRG")},
-                3: {1: ("English", "DRG"), 2: ("Biology", "KPS"), 3: ("Physics", "RKB"), 4: ("Chemistry", "DNB"), 5: ("Nepali", "SRG")},
-                4: {1: ("Biology", "KPS"), 2: ("Chemistry", "DNB"), 3: ("Mathematics", "IPG"), 4: ("Nepali", "SRG"), 5: ("Physics", "RKB")},
-                5: {1: ("Mathematics", "IPG"), 2: ("Nepali", "SRG"), 3: ("Computer Sci.", "PL"), 4: ("Physics", "RKB"), 5: ("Chemistry", "DNB")},
-                6: {1: ("Chem Lab", "DNB"), 2: ("Physics Lab", "RKB"), 3: ("Nepali", "SRG"), 4: ("Mathematics", "IPG"), 5: ("Computer Lab", "PL")},
+                1: {},
+                2: {1: ("Nepali", "KK"), 2: ("Physics", "SP"), 3: ("Physics", "TRS"), 4: ("PHy PR, Che PR", "TRS, PB"), 5: ("Maths", "LBR"), 6: ("Botany", "SD"), 7: ("Chemistry", "PS"), 8: ("English", "PRT"), 9: ("Zoology", "SH")},
+                3: {1: ("Maths", "IPG"), 2: ("Physics", "TRS"), 3: ("Maths", "LBR"), 4: ("Bot PR, PHy PR", "SD, PA"), 5: ("Chemistry", "PS"), 6: ("Physics", "PA"), 7: ("Chemistry", "PB"), 8: ("Nepali", "SRG"), 9: ("Zoology", "SH")},
+                4: {1: ("Maths", "IPG"), 2: ("MCQ's", "GR"), 3: ("Zoology", "SH"), 4: ("Chem PR, Zol PR", "AP, SH"), 5: ("Botany", "SD"), 6: ("Physics", "PA"), 7: ("Math", "KB"), 8: ("English", "BSB"), 9: ("Chemistry", "AP")},
+                5: {1: ("Botany", "SD"), 2: ("Maths", "LBR"), 3: ("Chemistry", "PB"), 4: ("Chemistry", "PS"), 5: ("Zoology", "SH"), 6: ("Maths", "PA"), 7: ("Nepali", "SRG"), 8: ("Physics", "PA"), 9: ("English", "BSB")},
+                6: {1: ("Nepali", "KK"), 2: ("Chemistry", "AP"), 3: ("Maths", "IPG"), 4: ("Physics", "PA"), 5: ("Math", "KB"), 6: ("Chemistry", "PB"), 7: ("Botany", "SD"), 8: ("English", "PRT"), 9: ("Physics", "TRS")},
                 7: {}
             },
             "Class 11 C": {
-                1: {1: ("Programming", "PL"), 2: ("Database", "PL"), 3: ("Mathematics", "IPG"), 4: ("English", "DRG"), 5: ("Nepali", "SRG")},
-                2: {1: ("Database", "PL"), 2: ("Programming", "PL"), 3: ("English", "DRG"), 4: ("Mathematics", "IPG"), 5: ("Computer Network", "PL")},
-                3: {1: ("Mathematics", "IPG"), 2: ("English", "DRG"), 3: ("Nepali", "SRG"), 4: ("Programming", "PL"), 5: ("Database", "PL")},
-                4: {1: ("English", "DRG"), 2: ("Nepali", "SRG"), 3: ("Programming", "PL"), 4: ("Database", "PL"), 5: ("Web Dev", "PL")},
-                5: {1: ("Computer Network", "PL"), 2: ("Mathematics", "IPG"), 3: ("Database", "PL"), 4: ("Programming", "PL"), 5: ("Web Dev", "PL")},
-                6: {1: ("Web Dev", "PL"), 2: ("Coding Lab", "PL"), 3: ("Hardware Lab", "PL"), 4: ("English", "DRG"), 5: ("Nepali", "SRG")},
+                1: {},
+                2: {1: ("Chemistry", "PS"), 2: ("Maths", "IPG"), 3: ("Chemistry", "PB"), 4: ("Computer", "KKC"), 5: ("Maths", "KB"), 6: ("Nepali", "KK"), 7: ("MCQ's", "GR"), 8: ("Physics", "RK"), 9: ("Physics", "PA")},
+                3: {1: ("PHy PR, Chem PR", "TRS, PB"), 2: ("English", "BSB"), 3: ("Computer PR", "KKC"), 4: ("Computer", "PKC"), 5: ("Maths", "LBR"), 6: ("Nepali", "KK"), 7: ("Physics", "PR"), 8: ("Chemistry", "BP"), 9: ("Chemistry", "AP")},
+                4: {1: ("Computer", "PKC"), 2: ("Maths", "IPG"), 3: ("Chemistry", "PB"), 4: ("Chemistry", "PS"), 5: ("Nepali", "SRG"), 6: ("Maths", "KB"), 7: ("English", "PRT"), 8: ("Physics", "RK"), 9: ("Physics", "TRS")},
+                5: {1: ("Che PR, PHy PR", "PB, TRS"), 2: ("Chemistry", "AP"), 3: ("Maths", "IPG"), 4: ("Maths", "LBR"), 5: ("Computer", "KKC"), 6: ("Nepali", "SRG"), 7: ("Physics", "TRS"), 8: ("English", "PRT"), 9: ("Physics", "PA")},
+                6: {1: ("Computer", "PKC"), 2: ("Maths", "LBR"), 3: ("Computer", "KKC"), 4: ("Maths", "IPG"), 5: ("Physics", "PA"), 6: ("Chemistry", "PS"), 7: ("Physics", "TRS"), 8: ("Chemistry", "AP"), 9: ("English", "BSB")},
                 7: {}
             },
             "Class 11 D": {
-                1: {1: ("Database", "PL"), 2: ("Mathematics", "IPG"), 3: ("Programming", "PL"), 4: ("Nepali", "SRG"), 5: ("English", "DRG")},
-                2: {1: ("Computer Network", "PL"), 2: ("English", "DRG"), 3: ("Database", "PL"), 4: ("Programming", "PL"), 5: ("Mathematics", "IPG")},
-                3: {1: ("Programming", "PL"), 2: ("Database", "PL"), 3: ("English", "DRG"), 4: ("Nepali", "SRG"), 5: ("Computer Network", "PL")},
-                4: {1: ("Mathematics", "IPG"), 2: ("Web Dev", "PL"), 3: ("English", "DRG"), 4: ("Programming", "PL"), 5: ("Database", "PL")},
-                5: {1: ("Web Dev", "PL"), 2: ("Programming", "PL"), 3: ("Mathematics", "IPG"), 4: ("Nepali", "SRG"), 5: ("Computer Network", "PL")},
-                6: {1: ("Coding Lab", "PL"), 2: ("Hardware Lab", "PL"), 3: ("Web Dev", "PL"), 4: ("Nepali", "SRG"), 5: ("English", "DRG")},
+                1: {},
+                2: {1: ("Maths", "IPG"), 2: ("Maths", "PP"), 3: ("Maths", "PP"), 4: ("English", "PRT"), 5: ("Nepali", "SRG"), 6: ("Physics", "SB"), 7: ("Physics", "PA"), 8: ("Chemistry", "PS"), 9: ("Chemistry", "AP")},
+                3: {1: ("Maths", "LBR"), 2: ("Chemistry", "MK"), 3: ("Computer", "PKC"), 4: ("Computer", "KKC"), 5: ("Physics", "SB"), 6: ("Nepali", "SRG"), 7: ("Chemistry", "PA"), 8: ("English", "DRG"), 9: ("Physics", "PA")},
+                4: {1: ("Maths", "LBR"), 2: ("Computer", "PKC"), 3: ("Computer PR", "KKC"), 4: ("Maths", "IPG"), 5: ("Computer", "KKC"), 6: ("Chemistry", "MK"), 7: ("Chemistry", "PS"), 8: ("Nepali", "SRG"), 9: ("Physics", "RK")},
+                5: {1: ("Maths", "IPG"), 2: ("Physics", "SB"), 3: ("Nepali", "SRG"), 4: ("Che PR, PHy PR", "AP, SB"), 5: ("Computer", "KKC"), 6: ("Chemistry", "PS"), 7: ("English", "PRT"), 8: ("Physics", "RK"), 9: ("Chemistry", "MK")},
+                6: {1: ("Maths", "IPG"), 2: ("Computer", "KKC"), 3: ("Computer", "PKC"), 4: ("PHy PR, Che", "PA, PS"), 5: ("Chemistry", "PB"), 6: ("English", "DRG"), 7: ("Chemistry", "PA"), 8: ("Physics", "RK"), 9: ("Maths", "PP")},
                 7: {}
             },
-
             # --- CLASS 12 ---
             "Class 12 A": {
-                1: {1: ("Physics II", "RKB"), 2: ("Chemistry II", "DNB"), 3: ("Mathematics II", "IPG"), 4: ("Nepali", "SRG"), 5: ("English", "DRG")},
-                2: {1: ("Chemistry II", "DNB"), 2: ("Physics II", "RKB"), 3: ("Nepali", "SRG"), 4: ("Mathematics II", "IPG"), 5: ("Biology II", "KPS")},
-                3: {1: ("Mathematics II", "IPG"), 2: ("Nepali", "SRG"), 3: ("Biology II", "KPS"), 4: ("Physics II", "RKB"), 5: ("Chemistry II", "DNB")},
-                4: {1: ("Nepali", "SRG"), 2: ("Biology II", "KPS"), 3: ("Physics II", "RKB"), 4: ("Chemistry II", "DNB"), 5: ("English", "DRG")},
-                5: {1: ("English", "DRG"), 2: ("Mathematics II", "IPG"), 3: ("Chemistry II", "DNB"), 4: ("Physics II", "RKB"), 5: ("Computer Sci.", "PL")},
-                6: {1: ("Computer Sci.", "PL"), 2: ("Physics Lab", "RKB"), 3: ("Chem Lab", "DNB"), 4: ("Mathematics II", "IPG"), 5: ("English", "DRG")},
+                1: {},
+                2: {1: ("Maths", "KB"), 2: ("Maths", "PP"), 3: ("Chemistry", "MK"), 4: ("English", "BSB"), 5: ("Zoology", "SH"), 6: ("Nepali", "SRG"), 7: ("Physics", "JR"), 8: ("Botany", "BPP"), 9: ("Botany", "BPP")},
+                3: {1: ("Physics", "SB"), 2: ("Zoology", "SH"), 3: ("Maths", "KB"), 4: ("English", "BSB"), 5: ("Zol PR, Che PR", "SH, BP"), 6: ("Chemistry", "PS"), 7: ("Physics", "PA"), 8: ("Nepali", "KK"), 9: ("Maths", "PP")},
+                4: {1: ("Maths", "KB"), 2: ("Maths", "PP"), 3: ("Nepali", "SRG"), 4: ("Chemistry", "MK"), 5: ("Che PR, PHy PR", "PS, SB"), 6: ("English", "DRG"), 7: ("Zoology", "SH"), 8: ("Chemistry", "PB"), 9: ("Physics", "JR")},
+                5: {1: ("Physics", "SB"), 2: ("Phy PR, Bot PR", "PA, BPP"), 3: ("Maths", "KB"), 4: ("English", "DRG"), 5: ("Bot PR, PHy PR", "PA, BPP"), 6: ("Chemistry", "MK"), 7: ("Physics", "JR"), 8: ("Botany", "BPP"), 9: ("Maths", "PP")},
+                6: {1: ("Physics", "SB"), 2: ("Zoology", "SH"), 3: ("Maths", "KB"), 4: ("Botany", "BPP"), 5: ("Chemistry", "PB"), 6: ("MCQ's", "GR"), 7: ("Nepali", "KK"), 8: ("Chemistry", "PS"), 9: ("Physics", "PA")},
                 7: {}
             },
             "Class 12 B": {
-                1: {1: ("Chemistry II", "DNB"), 2: ("Physics II", "RKB"), 3: ("Biology II", "KPS"), 4: ("English", "DRG"), 5: ("Mathematics II", "IPG")},
-                2: {1: ("Physics II", "RKB"), 2: ("Biology II", "KPS"), 3: ("Chemistry II", "DNB"), 4: ("Mathematics II", "IPG"), 5: ("Nepali", "SRG")},
-                3: {1: ("Biology II", "KPS"), 2: ("Chemistry II", "DNB"), 3: ("Physics II", "RKB"), 4: ("Nepali", "SRG"), 5: ("English", "DRG")},
-                4: {1: ("Mathematics II", "IPG"), 2: ("Physics II", "RKB"), 3: ("Nepali", "SRG"), 4: ("Chemistry II", "DNB"), 5: ("Computer Sci.", "PL")},
-                5: {1: ("Nepali", "SRG"), 2: ("English", "DRG"), 3: ("Physics II", "RKB"), 4: ("Chemistry II", "DNB"), 5: ("Mathematics II", "IPG")},
-                6: {1: ("Physics Lab", "RKB"), 2: ("Chem Lab", "DNB"), 3: ("Bio Lab", "KPS"), 4: ("English", "DRG"), 5: ("Mathematics II", "IPG")},
+                1: {},
+                2: {1: ("Nepali", "SRG"), 2: ("Chemistry", "MK"), 3: ("Chemistry", "PS"), 4: ("Maths", "KB"), 5: ("Physics", "TRS"), 6: ("Maths", "PP"), 7: ("Botany", "BPP"), 8: ("Chemistry", "PB"), 9: ("PHy PR, Che PR", "JR, MK")},
+                3: {1: ("Chemistry", "PS"), 2: ("Maths", "PP"), 3: ("MCQ's", "GR"), 4: ("Maths", "KB"), 5: ("Chemistry", "MK"), 6: ("Zoology", "SH"), 7: ("Physics", "JR"), 8: ("Physics", "SB"), 9: ("English", "BSB")},
+                4: {1: ("Nepali", "KK"), 2: ("Chemistry", "PS"), 3: ("Physics", "SB"), 4: ("Maths", "KB"), 5: ("Physics", "TRS"), 6: ("Zoology", "SH"), 7: ("Maths", "PP"), 8: ("English", "DRG"), 9: ("Che PR, Zol PR", "MK, SH")},
+                5: {1: ("Maths", "KB"), 2: ("Zoology", "SH"), 3: ("English", "BSB"), 4: ("Chemistry", "PB"), 5: ("Nepali", "KK"), 6: ("Botany", "BPP"), 7: ("Botany", "BPP"), 8: ("Physics", "JR"), 9: ("Bot PR, PHy PR", "BPP, JR")},
+                6: {1: ("Maths", "KB"), 2: ("Maths", "PP"), 3: ("Zoology", "SH"), 4: ("Nepali", "SRG"), 5: ("Botany", "BPP"), 6: ("Physics", "JR"), 7: ("Physics", "SB"), 8: ("English", "DRG"), 9: ("Chemistry", "MK")},
                 7: {}
             },
             "Class 12 C": {
-                1: {1: ("Adv Programming", "PL"), 2: ("Software Eng", "PL"), 3: ("Business Math II", "IPG"), 4: ("Nepali", "SRG"), 5: ("English", "DRG")},
-                2: {1: ("Software Eng", "PL"), 2: ("Adv Programming", "PL"), 3: ("Nepali", "SRG"), 4: ("Business Math II", "IPG"), 5: ("Cyber Security", "PL")},
-                3: {1: ("Business Math II", "IPG"), 2: ("Nepali", "SRG"), 3: ("English", "DRG"), 4: ("Adv Programming", "PL"), 5: ("Software Eng", "PL")},
-                4: {1: ("Nepali", "SRG"), 2: ("English", "DRG"), 3: ("Adv Programming", "PL"), 4: ("Software Eng", "PL"), 5: ("Data Structures", "PL")},
-                5: {1: ("English", "DRG"), 2: ("Business Math II", "IPG"), 3: ("Software Eng", "PL"), 4: ("Adv Programming", "PL"), 5: ("Data Structures", "PL")},
-                6: {1: ("Data Structures", "PL"), 2: ("Project Work", "PL"), 3: ("Software Lab", "PL"), 4: ("English", "DRG"), 5: ("Nepali", "SRG")},
+                1: {},
+                2: {1: ("Computer", "KKC"), 2: ("Computer PR", "PKC"), 3: ("Computer", "PKC"), 4: ("Chemistry", "AP"), 5: ("PHy PR, Che PR", "JR, AP"), 6: ("Maths", "KB"), 7: ("Chemistry", "PB"), 8: ("English", "BSB"), 9: ("Maths", "PP")},
+                3: {1: ("Computer", "PKC"), 2: ("Chemistry", "PB"), 3: ("Chemistry", "MK"), 4: ("Maths", "PP"), 5: ("Nepali", "SRG"), 6: ("Maths", "KB"), 7: ("Physics", "TRS"), 8: ("Physics", "RK"), 9: ("Physics", "JR")},
+                4: {1: ("Computer", "KKC"), 2: ("Chemistry", "MK"), 3: ("MCQ's", "GR"), 4: ("Physics", "TRS"), 5: ("English", "DRG"), 6: ("Nepali", "KK"), 7: ("Physics", "JR"), 8: ("Maths", "KB"), 9: ("Maths", "PP")},
+                5: {1: ("Computer", "KKC"), 2: ("Maths", "PP"), 3: ("Computer", "PKC"), 4: ("Physics", "TRS"), 5: ("Nepali", "SRG"), 6: ("Maths", "KB"), 7: ("Chemistry", "AP"), 8: ("Maths", "KB"), 9: ("Physics", "RK")},
+                6: {1: ("Chemistry", "PB"), 2: ("Chemistry", "MK"), 3: ("Chemistry", "AP"), 4: ("English", "BSB"), 5: ("Che PR, PHy PR", "MK, RK"), 6: ("Maths", "KB"), 7: ("Physics", "RK"), 8: ("Nepali", "KK"), 9: ("Physics", "JR")},
                 7: {}
             },
             "Class 12 D": {
-                1: {1: ("Software Eng", "PL"), 2: ("Business Math II", "IPG"), 3: ("Adv Programming", "PL"), 4: ("English", "DRG"), 5: ("Nepali", "SRG")},
-                2: {1: ("Adv Programming", "PL"), 2: ("Cyber Security", "PL"), 3: ("Software Eng", "PL"), 4: ("Nepali", "SRG"), 5: ("Business Math II", "IPG")},
-                3: {1: ("Cyber Security", "PL"), 2: ("Adv Programming", "PL"), 3: ("Nepali", "SRG"), 4: ("Business Math II", "IPG"), 5: ("English", "DRG")},
-                4: {1: ("Data Structures", "PL"), 2: ("Software Eng", "PL"), 3: ("English", "DRG"), 4: ("Nepali", "SRG"), 5: ("Adv Programming", "PL")},
-                5: {1: ("Business Math II", "IPG"), 2: ("Data Structures", "PL"), 3: ("English", "DRG"), 4: ("Software Eng", "PL"), 5: ("Nepali", "SRG")},
-                6: {1: ("Project Work", "PL"), 2: ("Software Lab", "PL"), 3: ("Data Structures", "PL"), 4: ("Nepali", "SRG"), 5: ("English", "DRG")},
+                1: {},
+                2: {1: ("Chemistry", "PB"), 2: ("Maths", "KB"), 3: ("Computer", "KKC"), 4: ("Nepali II", "KK"), 5: ("Computer", "PKC"), 6: ("Physics", "JR"), 7: ("Chemistry", "MK"), 8: ("English", "DRG"), 9: ("Physics", "RK")},
+                3: {1: ("Computer", "KKC"), 2: ("Maths", "KB"), 3: ("Physics", "SB"), 4: ("Nepali II", "SRG"), 5: ("English", "DRG"), 6: ("Chemistry", "AP"), 7: ("Maths", "PP"), 8: ("Physics", "JR"), 9: ("PHy PR, Che PR", "RK, MK")},
+                4: {1: ("Chemistry", "PB"), 2: ("Maths", "KB"), 3: ("Chemistry", "AP"), 4: ("Maths", "PP"), 5: ("Computer", "PKC"), 6: ("Physics", "RK"), 7: ("Nepali", "SRG"), 8: ("Physics", "SB"), 9: ("English", "BSB")},
+                5: {1: ("Computer PR", "PKC"), 2: ("Maths", "KB"), 3: ("Maths", "PP"), 4: ("English", "BSB"), 5: ("Chemistry", "MK"), 6: ("Physics", "RK"), 7: ("MCQ's", "GR"), 8: ("Nepali", "KK"), 9: ("Chemistry", "AP")},
+                6: {1: ("Computer", "KKC"), 2: ("Maths", "KB"), 3: ("Chemistry", "PB"), 4: ("Maths", "PP"), 5: ("Computer", "PKC"), 6: ("Physics", "SB"), 7: ("Physics", "JR"), 8: ("Chemistry", "MK"), 9: ("Che PR, Phy PR", "AP, RK")},
                 7: {}
             }
         }
         
         self.init_ui()
         self.start_listener()
-
-        # Set up real-time timer for clock and schedule updates
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_live_time_and_status)
+        self.timer.timeout.connect(self.sync_admin_data)
         self.timer.start(1000)
         self.update_live_time_and_status()
+        self.sync_admin_data()
 
     def start_listener(self):
         self.listener_thread = BarcodeListenerThread()
@@ -249,330 +426,502 @@ class ClassroomDashboard(QWidget):
 
     def open_cal(self):
         cal_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cal.py")
-        subprocess.Popen([sys.executable, cal_path], cwd=os.path.dirname(cal_path))
-        self.close()
+        if os.path.exists(cal_path):
+            subprocess.Popen([sys.executable, cal_path], cwd=os.path.dirname(cal_path))
+            self.close()
 
     def open_db(self):
-        subprocess.Popen([sys.executable, "database.py"])
-        self.close()
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database.py")
+        if os.path.exists(db_path):
+            subprocess.Popen([sys.executable, db_path])
+            self.close()
 
     def open_help(self):
         help_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "help.py")
-        subprocess.Popen([sys.executable, help_path], cwd=os.path.dirname(help_path))
-        QApplication.quit()
-        sys.exit()
+        if os.path.exists(help_path):
+            subprocess.Popen([sys.executable, help_path], cwd=os.path.dirname(help_path))
+            QApplication.quit()
 
     def handle_logout(self):
         reply = QMessageBox.question(
-            self, 'Confirm Logout', 'Are you sure you want to log out?', 
+            self, 'Confirm Session Exit', 'Are you sure you want to log out of the classroom system?', 
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
             QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
             admin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adminpage.py")
-            subprocess.Popen([sys.executable, admin_path], cwd=os.path.dirname(admin_path))
+            if os.path.exists(admin_path):
+                subprocess.Popen([sys.executable, admin_path], cwd=os.path.dirname(admin_path))
             self.close()
             QApplication.quit()
-            sys.exit()
+
+    def show_notifications(self):
+        dialog = NotificationDialog(self.current_notices, self)
+        dialog.exec()
+        self.seen_notices_count = len(self.current_notices)
+        self.update_notices_button_style()
+
+    def is_notice_relevant(self, notice):
+        if not is_recent(notice.get("timestamp")):
+            return False
+        target = notice.get("target", "")
+        sec_str = notice.get("section", "All Sections")
+        if sec_str != "All Sections":
+            expected_sec = f"Section {self.section_letter}"
+            if sec_str != expected_sec:
+                return False
+        if "Class 6-12" in target:
+            return True
+        if "Class 6-10" in target and (6 <= self.class_num <= 10):
+            return True
+        if "Class 11-12" in target and (11 <= self.class_num <= 12):
+            return True
+        match_range = re.search(r"Class\s+(\d+)(?:-(\d+))?", target)
+        if match_range:
+            start_g = int(match_range.group(1))
+            end_g = int(match_range.group(2)) if match_range.group(2) else start_g
+            if start_g <= self.class_num <= end_g:
+                return True
+        return False
+
+    def update_notices_button_style(self):
+        notice_count = len(self.current_notices)
+        unseen_count = notice_count - self.seen_notices_count
+        if unseen_count > 0:
+            self.btn_notices.setText(f"Notices ({unseen_count} New)")
+            self.btn_notices.setStyleSheet("""
+                QPushButton {
+                    background-color: #0284C7;
+                    color: #FFFFFF;
+                    border-radius: 10px;
+                    font-size: 14px;
+                    font-weight: 700;
+                    padding: 12px 18px;
+                    border: none;
+                    text-align: left;
+                }
+            """)
+        else:
+            self.btn_notices.setText("Notices")
+            self.btn_notices.setStyleSheet("""
+                QPushButton {
+                    background-color: rgba(255, 255, 255, 0.85);
+                    color: #0284C7;
+                    border-radius: 10px;
+                    padding: 12px 18px;
+                    font-size: 14px;
+                    font-weight: 700;
+                    border: 1px solid #7DD3FC;
+                    text-align: left;
+                }
+                QPushButton:hover {
+                    background-color: #0284C7;
+                    color: #FFFFFF;
+                }
+            """)
+
+    def sync_admin_data(self):
+        if not os.path.exists(DATA_FILE):
+            return
+        try:
+            with open(DATA_FILE, "r") as f:
+                data = json.load(f)
+        except Exception:
+            return
+            
+        all_notices = data.get("notices", [])
+        self.current_notices = [n for n in all_notices if self.is_notice_relevant(n)]
+        self.update_notices_button_style()
+        
+        all_substitutions = data.get("substitutions", [])
+        matching_subs = []
+        for sub in all_substitutions:
+            if not is_recent(sub.get("timestamp")):
+                continue
+            sub_c = str(sub.get('class', '')).strip()
+            sub_s = str(sub.get('section', '')).strip()
+            if sub_c == str(self.class_num) and sub_s.upper() == self.section_letter.upper():
+                matching_subs.append(sub)
+                
+        while self.sub_content_layout.count():
+            child = self.sub_content_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+                
+        if not matching_subs:
+            sub_msg1 = QLabel("No faculty substitutions recorded for today.")
+            sub_msg1.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            sub_msg1.setStyleSheet("color: #64748B; font-size: 13px; border: none; background: transparent; padding-top: 8px;")
+            self.sub_content_layout.addWidget(sub_msg1)
+        else:
+            for sub in matching_subs:
+                p = sub.get('period', '-')
+                absent = sub.get('absent', '-')
+                substitute = sub.get('substitute', '-')
+                sub_label = QLabel(f"<b>Period {p}:</b> {substitute} <span style='color:#64748B;'>(Replacing {absent})</span>")
+                sub_label.setStyleSheet("color: #0F172A; font-size: 13px; margin-top: 6px; border: none; background: transparent;")
+                self.sub_content_layout.addWidget(sub_label)
 
     def update_live_time_and_status(self):
         now = datetime.datetime.now()
-        
-        # 1. Update Real-Time Clock & Date in Header
         self.clock_lbl.setText(now.strftime("%I:%M:%S %p"))
-        self.date_lbl.setText(now.strftime("%A, %d %B %Y"))
-
-        # 2. Update Dynamic Period/Class Block
+        self.date_lbl.setText(now.strftime("%A, %B %d, %Y"))
         py_weekday = now.weekday()
         day_map = {6: 1, 0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7}
         current_routine_day = day_map[py_weekday]
-
         selected_routine = self.all_routines.get(self.selected_class_name, {})
         today_classes = selected_routine.get(current_routine_day, {})
-
+        
         if current_routine_day == 7:
-            # Weekend Holiday
-            self.curr_card.setStyleSheet("background-color: #243547; border-radius: 12px;")
-            self.badge.setText("Holiday")
-            self.badge.setStyleSheet("background-color: #3b4d61; color: #a4b3c1; border-radius: 10px; padding: 4px 8px; font-weight: bold; font-size: 10px;")
-            self.period_lbl.setText("Weekend  •  All Day")
-            self.subj_lbl.setText("Holiday (Saturday)")
-            self.teacher_lbl.setText("Teacher: -")
+            self.badge.setText("SCHEDULED OFF")
+            self.badge.setStyleSheet("background-color: #CBD5E1; color: #475569; border-radius: 6px; padding: 6px 12px; font-weight: 800; font-size: 11px;")
+            self.period_lbl.setText("Weekend - Non-Instructional Day")
+            self.subj_lbl.setText("Saturday Recess")
+            self.teacher_lbl.setText("Faculty: Unassigned")
         else:
             current_qtime = QTime.currentTime()
             active_block = None
-
             for p_num, time_str, start_t, end_t, is_break, p_idx in self.full_schedule_structure:
                 if start_t <= current_qtime <= end_t:
                     active_block = (p_num, time_str, is_break, p_idx)
                     break
-
             if active_block:
                 p_num, time_str, is_break, p_idx = active_block
                 if is_break:
-                    self.curr_card.setStyleSheet("background-color: #902a2a; border-radius: 12px;")
-                    self.badge.setText("Break")
-                    self.badge.setStyleSheet("background-color: #c0392b; color: #ffffff; border-radius: 10px; padding: 4px 8px; font-weight: bold; font-size: 10px;")
-                    self.period_lbl.setText(f"Break  •  {time_str}")
-                    self.subj_lbl.setText("☕ Break Time")
-                    self.teacher_lbl.setText("Teacher: -")
+                    self.badge.setText("RECESS / BREAK")
+                    self.badge.setStyleSheet("background-color: #FEF3C7; color: #D97706; border-radius: 6px; padding: 6px 12px; font-weight: 800; font-size: 11px;")
+                    self.period_lbl.setText(f"Break Interval • {time_str}")
+                    self.subj_lbl.setText("Recess Period")
+                    self.teacher_lbl.setText("Faculty: Standard Supervision")
                 else:
-                    subj, teacher = today_classes.get(p_idx, ("Free Period", "-"))
-                    self.curr_card.setStyleSheet("background-color: #243547; border-radius: 12px;")
-                    self.badge.setText("Ongoing")
-                    self.badge.setStyleSheet("background-color: #1e3d34; color: #2ecc71; border-radius: 10px; padding: 4px 8px; font-weight: bold; font-size: 10px;")
-                    self.period_lbl.setText(f"Period {p_num}  •  {time_str}")
+                    subj, teacher = today_classes.get(p_idx, ("Free Period", "N/A"))
+                    self.badge.setText("IN PROGRESS")
+                    self.badge.setStyleSheet("background-color: #DCFCE7; color: #15803D; border-radius: 6px; padding: 6px 12px; font-weight: 800; font-size: 11px;")
+                    self.period_lbl.setText(f"Period {p_num} • {time_str}")
                     self.subj_lbl.setText(subj)
-                    self.teacher_lbl.setText(f"Teacher: {teacher}")
+                    self.teacher_lbl.setText(f"Instructor: {teacher}")
             else:
-                self.curr_card.setStyleSheet("background-color: #243547; border-radius: 12px;")
-                self.badge.setText("Offline")
-                self.badge.setStyleSheet("background-color: #3b4d61; color: #a4b3c1; border-radius: 10px; padding: 4px 8px; font-weight: bold; font-size: 10px;")
-                self.period_lbl.setText("School Hours Closed")
+                self.badge.setText("INACTIVE")
+                self.badge.setStyleSheet("background-color: #E2E8F0; color: #64748B; border-radius: 6px; padding: 6px 12px; font-weight: 800; font-size: 11px;")
+                self.period_lbl.setText("Academic Hours Concluded")
                 self.subj_lbl.setText("No Active Class")
-                self.teacher_lbl.setText("Teacher: -")
+                self.teacher_lbl.setText("Instructor: Unassigned")
 
     def update_schedule_table(self):
         py_weekday = datetime.datetime.now().weekday()
         day_map = {6: 1, 0: 2, 1: 3, 2: 4, 3: 5, 4: 6, 5: 7}
         current_routine_day = day_map[py_weekday]
-
         selected_routine = self.all_routines.get(self.selected_class_name, {})
         today_classes = selected_routine.get(current_routine_day, {})
-
         data = []
+        
         if current_routine_day == 7:
-            data.append(("-", "All Day", "🎉 Weekend Holiday", "-"))
+            data.append(("-", "All Day", "Weekend Recess", "-"))
         else:
             for p_num, time_str, _, _, is_break, p_idx in self.full_schedule_structure:
                 if is_break:
-                    data.append((p_num, time_str, "☕ Break", "-"))
+                    data.append((p_num, time_str, "Intermission / Recess", "-"))
                 else:
                     subj, teacher = today_classes.get(p_idx, ("-", "-"))
                     data.append((p_num, time_str, subj, teacher))
-
+                    
         self.table.setRowCount(len(data))
         for row, period in enumerate(data):
             for col, item in enumerate(period):
                 item_widget = QTableWidgetItem(item)
-                if period[2] in ["☕ Break", "🎉 Weekend Holiday"]:
-                    item_widget.setForeground(Qt.GlobalColor.darkGray)
+                if period[2] in ["Intermission / Recess", "Weekend Recess"]:
+                    item_widget.setForeground(QColor("#94A3B8"))
+                else:
+                    item_widget.setForeground(QColor("#0F172A"))
                 self.table.setItem(row, col, item_widget)
-        self.table.selectRow(0)
 
     def init_ui(self):
-        self.setWindowTitle(f"Classroom Display System - {self.selected_class_name}")
-        self.resize(1100, 650)
-        self.setStyleSheet("background-color: #1a2936; color: #ffffff; font-family: 'Segoe UI', sans-serif;")
+        self.setWindowTitle(f"SOS Hermann Gmeiner School Gandaki - Portal ({self.selected_class_name})")
+        self.resize(1200, 720)
         
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Sidebar Navigation
-        sidebar = QFrame()
-        sidebar.setFixedWidth(70)
-        sidebar.setStyleSheet("background-color: #15222e; border-right: 1px solid #243547;")
+        bg_widget = AnimatedBubbleBackground(self)
+        root_layout.addWidget(bg_widget)
+        
+        app_layout = QHBoxLayout(bg_widget)
+        app_layout.setContentsMargins(0, 0, 0, 0)
+        app_layout.setSpacing(0)
+        
+        sidebar = QWidget()
+        sidebar.setFixedWidth(260)
+        sidebar.setStyleSheet("background-color: rgba(255, 255, 255, 0.85); border-right: 1px solid #7DD3FC;")
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(10, 20, 10, 20)
-        sidebar_layout.setSpacing(15)
+        sidebar_layout.setContentsMargins(22, 26, 22, 26)
+        sidebar_layout.setSpacing(16)
         
-        btn_bell = QPushButton("🔔")
-        btn_home = QPushButton("🏠")
-        btn_cal = QPushButton("📅")
+        brand_container = QFrame()
+        brand_container.setStyleSheet("background-color: #0284C7; border-radius: 12px; padding: 12px;")
+        brand_box = QVBoxLayout(brand_container)
+        brand_box.setSpacing(2)
         
+        main_title = QLabel("SOS HGS")
+        main_title.setFont(QFont("Segoe UI", 18, QFont.Weight.Black))
+        main_title.setStyleSheet("color: #FFFFFF; background: transparent;")
+        sub_title = QLabel("GANDAKI PORTAL")
+        sub_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        sub_title.setStyleSheet("color: #BAE6FD; background: transparent; letter-spacing: 1px;")
+        
+        brand_box.addWidget(main_title)
+        brand_box.addWidget(sub_title)
+        sidebar_layout.addWidget(brand_container)
+        sidebar_layout.addSpacing(16)
+        
+        self.btn_home = QPushButton(" Home Dashboard")
+        self.btn_home.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_home.setStyleSheet("""
+            QPushButton {
+                background-color: #0284C7;
+                color: #FFFFFF;
+                border-radius: 10px;
+                padding: 12px 18px;
+                font-size: 14px;
+                font-weight: 700;
+                border: none;
+                text-align: left;
+            }
+        """)
+        
+        btn_cal = QPushButton(" Academic Calendar")
+        btn_cal.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cal.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255, 255, 255, 0.85);
+                color: #0284C7;
+                border-radius: 10px;
+                padding: 12px 18px;
+                font-size: 14px;
+                font-weight: 700;
+                border: 1px solid #7DD3FC;
+                text-align: left;
+            }
+            QPushButton:hover {
+                background-color: #0284C7;
+                color: #FFFFFF;
+            }
+        """)
         btn_cal.clicked.connect(self.open_cal)
         
-        nav_buttons = [btn_bell, btn_home, btn_cal]
-        for btn in nav_buttons:
-            btn.setFixedSize(50, 45)
-            btn.setFont(QFont("Segoe UI", 12))
-            btn.setStyleSheet(
-                "QPushButton { background-color: transparent; color: #8c9fae; border-radius: 8px; border: none; } "
-                "QPushButton:hover { background-color: #243547; color: #ffffff; }"
-            )
-            sidebar_layout.addWidget(btn)
-            
-        btn_home.setStyleSheet("background-color: #2a3e52; color: #3498db; border-radius: 8px;")
+        self.btn_notices = QPushButton(" Notices")
+        self.btn_notices.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_notices.clicked.connect(self.show_notifications)
+        
+        sidebar_layout.addWidget(self.btn_home)
+        sidebar_layout.addWidget(btn_cal)
+        sidebar_layout.addWidget(self.btn_notices)
         sidebar_layout.addStretch()
-        main_layout.addWidget(sidebar)
         
-        # Content Area
-        content_area = QWidget()
-        content_layout = QVBoxLayout(content_area)
-        content_layout.setContentsMargins(30, 20, 30, 20)
-        content_layout.setSpacing(15)
+        btn_attendance = QPushButton("Mark Attendance")
+        btn_attendance.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_attendance.setStyleSheet("""
+            QPushButton {
+                background-color: #0284C7;
+                color: #FFFFFF;
+                border-radius: 10px;
+                padding: 14px 18px;
+                font-weight: 700;
+                font-size: 14px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #0369A1; }
+        """)
+        btn_attendance.clicked.connect(self.open_db)
+        sidebar_layout.addWidget(btn_attendance)
         
-        # Top Header Banner
-        top_banner = QHBoxLayout()
+        app_layout.addWidget(sidebar)
         
-        self.class_title = QLabel(self.selected_class_name)
-        self.class_title.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
-        self.class_title.setStyleSheet("color: #ffffff;")
+        main_content = QWidget()
+        main_content.setStyleSheet("background: transparent;")
+        main_layout = QVBoxLayout(main_content)
+        main_layout.setContentsMargins(32, 24, 32, 24)
+        main_layout.setSpacing(20)
+        
+        top_bar = QHBoxLayout()
+        self.class_title = QLabel(f"Classroom Portal • {self.selected_class_name}")
+        self.class_title.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        self.class_title.setStyleSheet("color: #0369A1; background: transparent;")
         
         time_box = QVBoxLayout()
+        time_box.setSpacing(2)
+        time_box.setAlignment(Qt.AlignmentFlag.AlignRight)
+        
         self.clock_lbl = QLabel("")
-        self.clock_lbl.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        self.clock_lbl.setStyleSheet("color: #a4b3c1;")
+        self.clock_lbl.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.clock_lbl.setStyleSheet("color: #0284C7; background: transparent;")
         
         self.date_lbl = QLabel("")
-        self.date_lbl.setFont(QFont("Segoe UI", 10))
-        self.date_lbl.setStyleSheet("color: #6a7e90;")
+        self.date_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+        self.date_lbl.setStyleSheet("color: #475569; background: transparent;")
         
         time_box.addWidget(self.clock_lbl)
         time_box.addWidget(self.date_lbl)
         
-        # Restored "Mark Your Attendance" Button
-        btn_attendance = QPushButton("📋 Mark Your Attendance")
-        btn_attendance.setStyleSheet(
-            "QPushButton { background-color: #3498db; color: #ffffff; border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 13px; border: none; } "
-            "QPushButton:hover { background-color: #2980b9; }"
-        )
-        btn_attendance.clicked.connect(self.open_db)
+        top_bar.addWidget(self.class_title)
+        top_bar.addStretch()
+        top_bar.addLayout(time_box)
+        main_layout.addLayout(top_bar)
         
-        top_banner.addWidget(self.class_title)
-        top_banner.addStretch()
-        top_banner.addLayout(time_box)
-        top_banner.addSpacing(20)
-        top_banner.addWidget(btn_attendance)
-        content_layout.addLayout(top_banner)
+        top_cards_layout = QHBoxLayout()
+        top_cards_layout.setSpacing(20)
         
-        # Currently Card Block
         self.curr_card = QFrame()
-        self.curr_card.setStyleSheet("background-color: #243547; border-radius: 12px;")
+        self.curr_card.setStyleSheet("background-color: rgba(255, 255, 255, 0.88); border-radius: 16px; border: 1.5px solid #7DD3FC;")
         curr_layout = QVBoxLayout(self.curr_card)
-        curr_layout.setContentsMargins(20, 15, 20, 15)
+        curr_layout.setContentsMargins(24, 20, 24, 20)
         
         curr_head = QHBoxLayout()
-        curr_title = QLabel("Currently")
-        curr_title.setFont(QFont("Segoe UI", 11))
-        curr_title.setStyleSheet("color: #8c9fae;")
+        curr_title = QLabel("CURRENT INSTRUCTIONAL STATUS")
+        curr_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        curr_title.setStyleSheet("color: #0284C7; border: none; background: transparent; letter-spacing: 0.8px;")
         
-        self.badge = QLabel("Ongoing")
-        self.badge.setStyleSheet("background-color: #1e3d34; color: #2ecc71; border-radius: 10px; padding: 4px 8px; font-weight: bold; font-size: 10px;")
+        self.badge = QLabel("IN PROGRESS")
+        self.badge.setStyleSheet("background-color: #DCFCE7; color: #15803D; border-radius: 6px; padding: 6px 12px; font-weight: 800; font-size: 11px;")
         
         curr_head.addWidget(curr_title)
         curr_head.addStretch()
         curr_head.addWidget(self.badge)
         
         self.period_lbl = QLabel("-")
-        self.period_lbl.setStyleSheet("color: #6a7e90; font-size: 11px; margin-top: 4px;")
-        
+        self.period_lbl.setStyleSheet("color: #64748B; font-size: 13px; font-weight: 600; margin-top: 4px; border: none; background: transparent;")
         self.subj_lbl = QLabel("-")
-        self.subj_lbl.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        self.subj_lbl.setStyleSheet("color: #ffffff;")
-        
-        self.teacher_lbl = QLabel("Teacher: -")
-        self.teacher_lbl.setStyleSheet("color: #a4b3c1; font-size: 12px;")
+        self.subj_lbl.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        self.subj_lbl.setStyleSheet("color: #0F172A; border: none; background: transparent;")
+        self.teacher_lbl = QLabel("Instructor: -")
+        self.teacher_lbl.setStyleSheet("color: #334155; font-size: 14px; font-weight: 600; border: none; background: transparent;")
         
         curr_layout.addLayout(curr_head)
         curr_layout.addWidget(self.period_lbl)
         curr_layout.addWidget(self.subj_lbl)
         curr_layout.addWidget(self.teacher_lbl)
         
-        # Substitutions Card Block
         sub_card = QFrame()
-        sub_card.setStyleSheet("background-color: #243547; border-radius: 12px;")
+        sub_card.setStyleSheet("background-color: rgba(255, 255, 255, 0.88); border-radius: 16px; border: 1.5px solid #7DD3FC;")
         sub_layout = QVBoxLayout(sub_card)
-        sub_layout.setContentsMargins(20, 15, 20, 15)
+        sub_layout.setContentsMargins(24, 20, 24, 20)
         
-        sub_title = QLabel("Today's Substitutions")
-        sub_title.setFont(QFont("Segoe UI", 11))
-        sub_title.setStyleSheet("color: #8c9fae;")
-        
-        sub_msg1 = QLabel("No substitutions for today.")
-        sub_msg1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub_msg1.setStyleSheet("color: #6a7e90; margin-top: 15px;")
-        
-        sub_msg2 = QLabel("Enjoy your classes!")
-        sub_msg2.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub_msg2.setStyleSheet("color: #a4b3c1; font-size: 11px;")
+        sub_title = QLabel("FACULTY SUBSTITUTIONS")
+        sub_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        sub_title.setStyleSheet("color: #0284C7; border: none; background: transparent; letter-spacing: 0.8px;")
         
         sub_layout.addWidget(sub_title)
-        sub_layout.addWidget(sub_msg1)
-        sub_layout.addWidget(sub_msg2)
+        self.sub_content_layout = QVBoxLayout()
+        sub_layout.addLayout(self.sub_content_layout)
         sub_layout.addStretch()
         
-        top_cards_layout = QHBoxLayout()
-        top_cards_layout.setSpacing(15)
         top_cards_layout.addWidget(self.curr_card, 1)
         top_cards_layout.addWidget(sub_card, 1)
-        content_layout.addLayout(top_cards_layout)
+        main_layout.addLayout(top_cards_layout)
         
-        # Table Frame
         table_container = QFrame()
-        table_container.setStyleSheet("background-color: #243547; border-radius: 12px;")
+        table_container.setStyleSheet("background-color: rgba(255, 255, 255, 0.88); border-radius: 16px; border: 1.5px solid #7DD3FC;")
         table_box_layout = QVBoxLayout(table_container)
-        table_box_layout.setContentsMargins(15, 15, 15, 15)
+        table_box_layout.setContentsMargins(24, 20, 24, 20)
         
         table_head = QHBoxLayout()
-        routine_lbl = QLabel("Today's Routine")
-        routine_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        routine_lbl.setStyleSheet("color: #ffffff;")
+        routine_lbl = QLabel("Daily Academic Schedule")
+        routine_lbl.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        routine_lbl.setStyleSheet("color: #0F172A; border: none; background: transparent;")
         
         table_head.addWidget(routine_lbl)
         table_head.addStretch()
         table_box_layout.addLayout(table_head)
-
+        
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Period", "Time", "Subject", "Teacher"])
+        self.table.setHorizontalHeaderLabels(["Period", "Time Interval", "Subject / Activity", "Instructor"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
-        self.table.setStyleSheet(
-            "QTableWidget { background-color: transparent; color: #e1e8ed; border: none; } "
-            "QHeaderView::section { background-color: transparent; color: #6a7e90; font-weight: bold; border: none; padding-bottom: 8px; } "
-            "QTableWidget::item { padding: 6px; border-bottom: 1px solid #1a2936; } "
-            "QTableWidget::item:selected { background-color: #2c4257; color: #ffffff; }"
-        )
-        
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: transparent;
+                color: #0F172A;
+                font-size: 13px;
+                border: none;
+            }
+            QHeaderView::section {
+                background-color: #E0F2FE;
+                color: #0284C7;
+                font-weight: 800;
+                font-size: 12px;
+                border: none;
+                padding: 10px;
+                border-bottom: 2px solid #38BDF8;
+            }
+            QTableWidget::item {
+                padding: 10px;
+                border-bottom: 1px solid #E2E8F0;
+            }
+            QTableWidget::item:selected {
+                background-color: #BAE6FD;
+                color: #0284C7;
+            }
+        """)
         table_box_layout.addWidget(self.table)
-        content_layout.addWidget(table_container)
+        main_layout.addWidget(table_container)
         
-        # Load Routine Table Data
         self.update_schedule_table()
         
-        # Footer Bar
         footer = QFrame()
-        footer.setStyleSheet("background-color: #15222e; border-radius: 8px;")
+        footer.setStyleSheet("background-color: rgba(255, 255, 255, 0.88); border-radius: 12px; border: 1px solid #7DD3FC;")
         footer_layout = QHBoxLayout(footer)
-        footer_layout.setContentsMargins(15, 8, 15, 8)
+        footer_layout.setContentsMargins(20, 10, 20, 10)
         
-        quote_lbl = QLabel("Discipline is the bridge between goals and achievement.")
-        quote_lbl.setStyleSheet("color: #8c9fae; font-size: 11px;")
+        quote_lbl = QLabel("SOS Hermann Gmeiner School Gandaki • Excellence & Character in Education")
+        quote_lbl.setStyleSheet("color: #475569; font-size: 12px; font-weight: 600; border: none; background: transparent;")
         
         actions_layout = QHBoxLayout()
         actions_layout.setSpacing(10)
         
-        btn_help = QPushButton("❓ Help")
-        btn_help.setStyleSheet(
-            "QPushButton { background-color: #243547; color: #ffffff; border-radius: 6px; padding: 5px 12px; font-size: 11px; border: none; } "
-            "QPushButton:hover { background-color: #34495e; }"
-        )
+        btn_help = QPushButton("System Guide")
+        btn_help.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_help.setStyleSheet("""
+            QPushButton {
+                background-color: #E0F2FE;
+                color: #0284C7;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 12px;
+                border: 1px solid #7DD3FC;
+                font-weight: 700;
+            }
+            QPushButton:hover { background-color: #BAE6FD; }
+        """)
         btn_help.clicked.connect(self.open_help)
-
-        btn_logout = QPushButton("🚪 Logout")
-        btn_logout.setStyleSheet(
-            "QPushButton { background-color: #c0392b; color: #ffffff; border-radius: 6px; padding: 5px 12px; font-size: 11px; border: none; font-weight: bold; } "
-            "QPushButton:hover { background-color: #e74c3c; }"
-        )
+        
+        btn_logout = QPushButton("Logout")
+        btn_logout.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_logout.setStyleSheet("""
+            QPushButton {
+                background-color: #EF4444;
+                color: #FFFFFF;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 12px;
+                border: none;
+                font-weight: 700;
+            }
+            QPushButton:hover { background-color: #DC2626; }
+        """)
         btn_logout.clicked.connect(self.handle_logout)
-
+        
         actions_layout.addWidget(btn_help)
         actions_layout.addWidget(btn_logout)
-
+        
         footer_layout.addWidget(quote_lbl)
         footer_layout.addStretch()
         footer_layout.addLayout(actions_layout)
         
-        content_layout.addWidget(footer)
-        main_layout.addWidget(content_area)
-
+        main_layout.addWidget(footer)
+        app_layout.addWidget(main_content)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
-    # Extract arguments passed from classselect.py
     if len(sys.argv) >= 3:
         target_class = f"Class {sys.argv[1]} {sys.argv[2]}"
     elif len(sys.argv) == 2:
@@ -580,28 +929,6 @@ if __name__ == "__main__":
         target_class = raw_arg if raw_arg.startswith("Class ") else f"Class {raw_arg}"
     else:
         target_class = "Class 6 A"
-
     window = ClassroomDashboard(target_class)
     window.show()
     sys.exit(app.exec())
-
-DATA_FILE = "data.json"
-
-def get_transferred_data():
-    if not os.path.exists(DATA_FILE):
-        return {"substitutions": [], "notices": []}
-    
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
-
-if __name__ == "__main__":
-    data = get_transferred_data()
-    
-    print("=== TRANSFERRED SUBSTITUTIONS ===")
-    for sub in data.get("substitutions", []):
-        print(f"Class: {sub['class']}-{sub['section']} | Period: {sub['period']} | Absent: {sub['absent']} | Substitute: {sub['substitute']} | Time: {sub['time']}")
-        
-    print("\n=== TRANSFERRED NOTICES ===")
-    for notice in data.get("notices", []):
-        print(f"Title: {notice['title']} | Target: Classes {notice['lower']}-{notice['upper']} | File: {notice['file']}\nContent: {notice['content']}\n")
-
