@@ -89,7 +89,7 @@ class CalendarWidget(QWidget):
         self.year = datetime.now().year
         self.month = datetime.now().month
         
-        self.setWindowTitle("SOS Hermann Gmeiner Secondary School Gandaki")
+        self.setWindowTitle("SOS Hermann Gmeiner School Gandaki")
         self.resize(780, 620)
 
         # Wave and Particle Animation parameters
