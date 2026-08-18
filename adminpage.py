@@ -1,15 +1,15 @@
 import sys
 import os
+import json
 import math
 import random
 import pygame
 import subprocess
-
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QStackedWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QFrame, QMessageBox, QPushButton
 )
-from PyQt6.QtCore import Qt, QTimer, QElapsedTimer, pyqtProperty
+from PyQt6.QtCore import Qt, QTimer, QElapsedTimer, pyqtProperty, QDateTime
 from PyQt6.QtGui import QFont, QPainter, QLinearGradient, QRadialGradient, QColor, QPainterPath, QPixmap
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -17,9 +17,9 @@ KEYBOARD_SOUND = os.path.join(BASE_DIR, "keyboard.mp3")
 UI_SOUND = os.path.join(BASE_DIR, "ui.wav")
 UI1_SOUND = os.path.join(BASE_DIR, "ui1.wav")
 LOGO_FILE = os.path.join(BASE_DIR, "logo.jpg")
+CREDENTIALS_FILE = os.path.join(BASE_DIR, "admin_credentials.json")
 
 pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
-
 try:
     pygame.mixer.init()
     AUDIO_READY = True
@@ -36,13 +36,11 @@ if AUDIO_READY:
             keyboard_sound = pygame.mixer.Sound(KEYBOARD_SOUND)
     except Exception:
         pass
-
     try:
         if os.path.exists(UI_SOUND):
             ui_sound = pygame.mixer.Sound(UI_SOUND)
     except Exception:
         pass
-
     try:
         if os.path.exists(UI1_SOUND):
             ui1_sound = pygame.mixer.Sound(UI1_SOUND)
@@ -105,7 +103,6 @@ class AnimatedBackground(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         width = self.width()
         height = self.height()
-
         background = QLinearGradient(0, 0, 0, height)
         background.setColorAt(0.0, QColor(168, 221, 245))
         background.setColorAt(0.20, QColor(203, 237, 250))
@@ -130,7 +127,7 @@ class AnimatedBackground(QWidget):
         )
         top_wave.cubicTo(
             width * 0.83, 175 + math.cos(self.phase) * 10,
-            width * 0.92, 145 + math.sin(self.phase) * 8,
+            width * 0.92, 145 + math.sin(self.phase + 8),
             width, 180
         )
         top_wave.lineTo(width, 0)
@@ -256,7 +253,7 @@ class HoverButton(QWidget):
             self.animation.stop()
         else:
             self.hover_progress += difference * 0.18
-        self.update()
+            self.update()
 
     def enterEvent(self, event):
         self.hovered = True
@@ -319,7 +316,7 @@ class HoverButton(QWidget):
             self.hover_channel.stop()
             self.hover_channel.set_volume(0.0)
             self.hover_channel = None
-        self.hover_elapsed = None
+            self.hover_elapsed = None
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -329,7 +326,6 @@ class HoverButton(QWidget):
         current_height = self.normal_height + (self.hover_height - self.normal_height) * progress
         x = (self.width() - current_width) / 2
         y = (self.height() - current_height) / 2
-
         if progress > 0.01:
             background = QColor(7, 89, 133, 255)
             border = QColor(7, 89, 133, 255)
@@ -346,11 +342,9 @@ class HoverButton(QWidget):
         painter.fillPath(path, background)
         painter.setPen(border)
         painter.drawPath(path)
-
         painter.setFont(QFont("Segoe UI", 17, QFont.Weight.DemiBold))
         painter.setPen(title_color)
         painter.drawText(int(x), int(y + 28), int(current_width), 35, Qt.AlignmentFlag.AlignCenter, self.title)
-
         painter.setFont(QFont("Segoe UI", 11))
         painter.setPen(subtitle_color)
         painter.drawText(int(x), int(y + 68), int(current_width), 25, Qt.AlignmentFlag.AlignCenter, self.subtitle)
@@ -371,10 +365,24 @@ class SelectionPage(AnimatedBackground):
 
     def setup_ui(self):
         main = QVBoxLayout(self)
-        main.setContentsMargins(50, 30, 50, 35)
+        main.setContentsMargins(50, 15, 50, 30)
         main.setSpacing(0)
-        main.addStretch(1)
 
+        # Header Bar for Time Display
+        header_layout = QHBoxLayout()
+        header_layout.addStretch()
+        self.time_label = QLabel()
+        self.time_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.time_label.setStyleSheet("color: #0369A1; background: transparent; border: none;")
+        header_layout.addWidget(self.time_label)
+        main.addLayout(header_layout)
+
+        self.time_timer = QTimer(self)
+        self.time_timer.timeout.connect(self.update_live_time)
+        self.time_timer.start(1000)
+        self.update_live_time()
+
+        main.addStretch(1)
         logo = RoundedLogo(135, 135, 22)
         main.addWidget(logo, 0, Qt.AlignmentFlag.AlignCenter)
         main.addSpacing(18)
@@ -403,6 +411,7 @@ class SelectionPage(AnimatedBackground):
         self.admin_button = HoverButton("Admin Portal", "Login Required")
         button_layout.addWidget(self.class_button)
         button_layout.addWidget(self.admin_button)
+
         main.addWidget(button_area, 0, Qt.AlignmentFlag.AlignCenter)
         main.addSpacing(45)
 
@@ -412,6 +421,10 @@ class SelectionPage(AnimatedBackground):
         info.setStyleSheet("QLabel { color: #94A3B8; background: transparent; border: none; }")
         main.addWidget(info)
         main.addStretch(1)
+
+    def update_live_time(self):
+        current_str = QDateTime.currentDateTime().toString("ddd MMM d, h:mm A")
+        self.time_label.setText(f"🕒 {current_str}")
 
     def button_clicked(self, title):
         if title == "Class Display":
@@ -474,76 +487,101 @@ class AdminLoginPage(AnimatedBackground):
 
     def setup_ui(self):
         main = QVBoxLayout(self)
-        main.setContentsMargins(50, 30, 50, 35)
+        main.setContentsMargins(50, 15, 50, 25)
         main.setSpacing(0)
+
+        # Header Bar for Live Time Display
+        header_layout = QHBoxLayout()
+        header_layout.addStretch()
+        self.time_label = QLabel()
+        self.time_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.time_label.setStyleSheet("color: #0369A1; background: transparent; border: none;")
+        header_layout.addWidget(self.time_label)
+        main.addLayout(header_layout)
+
+        self.time_timer = QTimer(self)
+        self.time_timer.timeout.connect(self.update_live_time)
+        self.time_timer.start(1000)
+        self.update_live_time()
+
         main.addStretch(1)
 
         title = QLabel("Admin Portal")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(QFont("Segoe UI", 36, QFont.Weight.Bold))
+        title.setFont(QFont("Segoe UI", 32, QFont.Weight.Bold))
         title.setStyleSheet("QLabel { color: #0369A1; background: transparent; border: none; }")
         main.addWidget(title)
 
         subtitle = QLabel("Enter your credentials to continue")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setFont(QFont("Segoe UI", 17))
+        subtitle.setFont(QFont("Segoe UI", 15))
         subtitle.setStyleSheet("QLabel { color: #64748B; background: transparent; border: none; }")
         main.addWidget(subtitle)
-        main.addSpacing(35)
+        main.addSpacing(20)
 
         card = QFrame()
-        card.setFixedSize(760, 475)
+        card.setFixedSize(700, 480)
         card.setStyleSheet(
             "QFrame { background-color: rgba(255, 255, 255, 242); border: 1px solid #BAE6FD; border-radius: 22px; }"
         )
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(55, 38, 55, 38)
-        card_layout.setSpacing(14)
+        card_layout.setContentsMargins(50, 24, 50, 24)
+        card_layout.setSpacing(8)
 
         username_label = QLabel("Admin ID")
-        username_label.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
+        username_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
         username_label.setStyleSheet("QLabel { color: #0F172A; background: transparent; border: none; }")
         card_layout.addWidget(username_label)
 
         self.username = QLineEdit()
         self.username.setPlaceholderText("Enter your Admin ID")
-        self.username.setFixedHeight(62)
+        self.username.setFixedHeight(50)
         self.username.setStyleSheet(self.input_style())
         card_layout.addWidget(self.username)
-        card_layout.addSpacing(10)
+        card_layout.addSpacing(4)
 
         password_label = QLabel("Password")
-        password_label.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
+        password_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
         password_label.setStyleSheet("QLabel { color: #0F172A; background: transparent; border: none; }")
         card_layout.addWidget(password_label)
 
         self.password = QLineEdit()
         self.password.setPlaceholderText("Enter your password")
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setFixedHeight(62)
+        self.password.setFixedHeight(50)
         self.password.setStyleSheet(self.input_style())
         card_layout.addWidget(self.password)
         card_layout.addSpacing(12)
 
         login = QPushButton("Login")
         login.setCursor(Qt.CursorShape.PointingHandCursor)
-        login.setFixedHeight(58)
-        login.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        login.setFixedHeight(48)
+        login.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         login.setStyleSheet(
-            "QPushButton { background-color: #0284C7; color: white; border: none; border-radius: 10px; padding: 12px; }"
+            "QPushButton { background-color: #0284C7; color: white; border: none; border-radius: 10px; padding: 10px; }"
             "QPushButton:hover { background-color: #0369A1; }"
             "QPushButton:pressed { background-color: #075985; }"
         )
         login.clicked.connect(self.login)
         card_layout.addWidget(login)
-        card_layout.addSpacing(4)
+
+        forgot_pwd = QPushButton("Forgot password?")
+        forgot_pwd.setCursor(Qt.CursorShape.PointingHandCursor)
+        forgot_pwd.setFixedHeight(32)
+        forgot_pwd.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        forgot_pwd.setStyleSheet(
+            "QPushButton { background-color: transparent; color: #E11D48; border: none; }"
+            "QPushButton:hover { color: #BE123C; text-decoration: underline; }"
+        )
+        forgot_pwd.clicked.connect(self.forgot_password)
+        card_layout.addWidget(forgot_pwd)
 
         back = QPushButton("Back")
         back.setCursor(Qt.CursorShape.PointingHandCursor)
-        back.setFixedHeight(48)
+        back.setFixedHeight(42)
         back.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         back.setStyleSheet(
-            "QPushButton { background-color: transparent; color: #0284C7; border: 1px solid #BAE6FD; border-radius: 9px; padding: 8px; }"
+            "QPushButton { background-color: transparent; color: #0284C7; border: 1px solid #BAE6FD; border-radius: 9px; padding: 6px; }"
             "QPushButton:hover { background-color: #F0F9FF; border: 1px solid #0284C7; color: #0369A1; }"
             "QPushButton:pressed { background-color: #E0F2FE; }"
         )
@@ -551,7 +589,7 @@ class AdminLoginPage(AnimatedBackground):
         card_layout.addWidget(back)
 
         main.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
-        main.addSpacing(18)
+        main.addSpacing(25)
 
         school_name = QLabel("SOS Hermann Gmeiner School Gandaki")
         school_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -560,23 +598,55 @@ class AdminLoginPage(AnimatedBackground):
         main.addWidget(school_name, 0, Qt.AlignmentFlag.AlignCenter)
         main.addStretch(1)
 
+    def update_live_time(self):
+        current_str = QDateTime.currentDateTime().toString("ddd MMM d, h:mm A")
+        self.time_label.setText(f"🕒 {current_str}")
+
     def input_style(self):
         return (
             "QLineEdit { background-color: white; color: #0F172A; border: 1px solid #BAE6FD; "
-            "border-radius: 10px; padding-left: 18px; padding-right: 18px; font-size: 16px; } "
+            "border-radius: 10px; padding-left: 16px; padding-right: 16px; font-size: 15px; } "
             "QLineEdit:focus { border: 2px solid #0284C7; background-color: #FFFFFF; }"
         )
+
+    def forgot_password(self):
+        play_click_sound()
+        QMessageBox.information(self, "Forgot Password", "CONTACT THE DEVELOPERS !!!")
+
+    def validate_credentials(self, entered_id, entered_password):
+        # 1. Developer Fallback
+        if entered_id == "SOSADMIN1" and entered_password == "ADMIN404":
+            return True
+
+        # 2. Dynamic JSON Check
+        if os.path.exists(CREDENTIALS_FILE):
+            try:
+                with open(CREDENTIALS_FILE, "r") as f:
+                    creds = json.load(f)
+                    custom_id = creds.get("admin_id")
+                    custom_pass = creds.get("password")
+                    if entered_id == custom_id and entered_password == custom_pass:
+                        return True
+            except Exception as e:
+                print(f"Error reading credentials file: {e}")
+
+        return False
 
     def login(self):
         username = self.username.text().strip()
         password = self.password.text().strip()
+
         if not username or not password:
             QMessageBox.warning(self, "Login Error", "Please enter both Admin ID and Password.")
             return
-        play_click_sound()
-        self.username.clear()
-        self.password.clear()
-        self.controller.open_admin_panel()
+
+        if self.validate_credentials(username, password):
+            play_click_sound()
+            self.username.clear()
+            self.password.clear()
+            self.controller.open_admin_panel()
+        else:
+            QMessageBox.critical(self, "Login Error", "Invalid Admin ID or Password.")
 
 class MainApp(QStackedWidget):
     def __init__(self):
@@ -584,13 +654,10 @@ class MainApp(QStackedWidget):
         self.setWindowTitle("SOS Hermann Gmeiner School Gandaki")
         self.setMinimumSize(900, 600)
         self.resize(1200, 750)
-
         self.selection_page = SelectionPage(self)
         self.admin_login_page = AdminLoginPage(self)
-
         self.addWidget(self.selection_page)
         self.addWidget(self.admin_login_page)
-
         self.setCurrentWidget(self.selection_page)
 
     def show_selection(self):
