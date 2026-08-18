@@ -84,10 +84,14 @@ class CalendarCell(QLabel):
 
 
 class CalendarWidget(QWidget):
-    def __init__(self):
+    def __init__(self, selected_class=None, selected_section=None):
         super().__init__()
         self.year = datetime.now().year
         self.month = datetime.now().month
+        
+        # Store passed class and section state
+        self.selected_class = selected_class
+        self.selected_section = selected_section
         
         self.setWindowTitle("SOS Hermann Gmeiner School Gandaki")
         self.resize(780, 620)
@@ -237,7 +241,12 @@ class CalendarWidget(QWidget):
         painter.end()
 
     def go_to_test(self):
-        subprocess.Popen([sys.executable, 'test.py'])
+        cmd = [sys.executable, 'test.py']
+        if self.selected_class:
+            cmd.append(str(self.selected_class))
+        if self.selected_section:
+            cmd.append(str(self.selected_section))
+        subprocess.Popen(cmd)
         QApplication.quit()
 
     def show_calendar(self):
@@ -357,6 +366,11 @@ class CalendarWidget(QWidget):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = CalendarWidget()
+    
+    # Read class/section passed from test.py
+    sel_class = sys.argv[1] if len(sys.argv) > 1 else None
+    sel_section = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    window = CalendarWidget(selected_class=sel_class, selected_section=sel_section)
     window.show()
     sys.exit(app.exec())
