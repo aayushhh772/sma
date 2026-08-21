@@ -12,6 +12,7 @@ QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
 QFrame, QPushButton, QMessageBox, QDialog, QScrollArea)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QTime, QUrl, QPointF
 from PyQt6.QtGui import QFont, QDesktopServices, QPainter, QPainterPath, QColor, QBrush
+from help import HelpWindow
 
 try:
     from database import process_scan
@@ -209,6 +210,7 @@ class NotificationDialog(QDialog):
 class ClassroomDashboard(QWidget):
     def __init__(self, current_class_name="Class 6 A"):
         super().__init__()
+        self.help_window = None
         self.selected_class_name = current_class_name
         self.current_notices = []
         self.seen_notices_count = 0
@@ -462,10 +464,13 @@ class ClassroomDashboard(QWidget):
             self.close()
 
     def open_help(self):
-        help_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "help.py")
-        if os.path.exists(help_path):
-            subprocess.Popen([sys.executable, help_path], cwd=os.path.dirname(help_path))
-            QApplication.quit()
+        if self.help_window is None:
+            self.help_window = HelpWindow(self)
+
+        self.hide()
+        self.help_window.show()
+        self.help_window.raise_()
+        self.help_window.activateWindow()
 
     def handle_logout(self):
         reply = QMessageBox.question(
