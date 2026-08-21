@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QFrame, QPushButton, QLineEdit, QTextEdit, QComboBox,
     QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem,
-    QHeaderView, QStackedWidget
+    QHeaderView, QStackedWidget, QInputDialog
 )
 from PyQt6.QtCore import Qt, QTimer, QPointF, QDateTime
 from PyQt6.QtGui import QFont, QPixmap, QPainter, QPainterPath, QColor, QPen, QBrush
@@ -108,11 +108,9 @@ class AnimatedBackgroundWidget(QWidget):
         w = self.width()
         h = self.height()
         painter.fillRect(0, 0, w, h, QColor("#eaf5fc"))
-
         self.draw_wave(painter, w, h, offset_y=h * 0.45, amplitude=25, frequency=0.008, color=QColor(0, 150, 220, 25), phase_shift=self.wave_phase)
         self.draw_wave(painter, w, h, offset_y=h * 0.55, amplitude=35, frequency=0.005, color=QColor(0, 110, 200, 20), phase_shift=self.wave_phase * 0.7)
         self.draw_wave(painter, w, h, offset_y=h * 0.65, amplitude=20, frequency=0.01, color=QColor(0, 160, 230, 30), phase_shift=self.wave_phase * 1.3)
-
         for b in self.bubbles:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(QColor(255, 255, 255, b.opacity)))
@@ -142,16 +140,36 @@ class AdminPanel(QWidget):
         self.selected_pdf_path = None
         self.init_ui()
 
+    def read_data(self):
+        try:
+            net_data = fetch_network_data(DATA_FILE)
+            if net_data:
+                return net_data
+        except Exception:
+            pass
+        if not os.path.exists(DATA_FILE):
+            return {}
+        try:
+            with open(DATA_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def save_data(self, data):
+        with open(DATA_FILE, "w") as f:
+            json.dump(data, f, indent=4)
+        try:
+            push_cloud_data(data)
+        except Exception as e:
+            print(f"Cloud sync error: {e}")
+
     def init_ui(self):
         self.setWindowTitle("SOS Hermann Gmeiner School Gandaki - Admin Panel")
         self.resize(1100, 700)
-
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
-
         self.bg_widget = AnimatedBackgroundWidget(self)
         root_layout.addWidget(self.bg_widget)
-
         main_layout = QHBoxLayout(self.bg_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -179,7 +197,7 @@ class AdminPanel(QWidget):
             logo_lbl.setPixmap(pix)
             logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             logo_lbl.setStyleSheet("border: none; background: transparent;")
-        sidebar_layout.addWidget(logo_lbl)
+            sidebar_layout.addWidget(logo_lbl)
 
         school_lbl = QLabel("SOS Hermann Gmeiner\nSchool Gandaki")
         school_lbl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
@@ -192,7 +210,6 @@ class AdminPanel(QWidget):
         btn_subs = QPushButton("🔄 Substitutions")
         btn_settings = QPushButton("⚙️ Settings")
         self.nav_btns = [btn_notices, btn_subs, btn_settings]
-
         for idx, btn in enumerate(self.nav_btns):
             btn.setFixedHeight(42)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -208,21 +225,18 @@ class AdminPanel(QWidget):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
-        # Top Header Bar with Live Date & Time
+        # Header Bar
         header_bar = QFrame()
         header_bar.setFixedHeight(50)
         header_bar.setStyleSheet("background: transparent; border-bottom: 1px solid #cbe3f5;")
         header_layout = QHBoxLayout(header_bar)
         header_layout.setContentsMargins(25, 0, 25, 0)
-
         portal_title = QLabel("Administrative Control Center")
         portal_title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         portal_title.setStyleSheet("color: #0066b2; border: none; background: transparent;")
-
         self.time_label = QLabel()
         self.time_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         self.time_label.setStyleSheet("color: #004080; border: none; background: transparent;")
-
         header_layout.addWidget(portal_title)
         header_layout.addStretch()
         header_layout.addWidget(self.time_label)
@@ -232,17 +246,14 @@ class AdminPanel(QWidget):
         self.stacked_widget = QStackedWidget()
         self.stacked_widget.setStyleSheet("background: transparent;")
 
-        # Page 1: Notices
         self.notice_page = QWidget()
         self.setup_notice_page()
         self.stacked_widget.addWidget(self.notice_page)
 
-        # Page 2: Substitutions
         self.sub_page = QWidget()
         self.setup_sub_page()
         self.stacked_widget.addWidget(self.sub_page)
 
-        # Page 3: Settings
         self.settings_page = QWidget()
         self.setup_settings_page()
         self.stacked_widget.addWidget(self.settings_page)
@@ -250,7 +261,7 @@ class AdminPanel(QWidget):
         content_layout.addWidget(self.stacked_widget)
         main_layout.addWidget(content_area)
 
-        # Live Clock Timer
+        # Live Clock
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_live_time)
         self.timer.start(1000)
@@ -318,17 +329,17 @@ class AdminPanel(QWidget):
         target_layout = QHBoxLayout()
         target_lbl = QLabel("Target Group:")
         target_lbl.setStyleSheet("color: #2c3e50; font-weight: bold; border: none; background: transparent;")
-
-        # Editable QComboBox allows selecting preset or typing custom text
+        
         self.combo_target = QComboBox()
-        self.combo_target.setEditable(True)
-        self.combo_target.addItems(["Class 6-12", "Class 6-10", "Class 11-12", "Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12", "Custom Class..."])
+        self.combo_target.addItems([
+            "Class 6-12", "Class 6-10", "Class 11-12", 
+            "Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12",
+            "✏️ Custom Selection / Range..."
+        ])
 
         section_lbl = QLabel("Section:")
         section_lbl.setStyleSheet("color: #2c3e50; font-weight: bold; border: none; background: transparent;")
-
         self.combo_section = QComboBox()
-        self.combo_section.setEditable(True)
 
         combo_style = """
             QComboBox {
@@ -338,9 +349,7 @@ class AdminPanel(QWidget):
                 border-radius: 6px;
                 border: 1px solid #b2d4ee;
             }
-            QComboBox:focus {
-                border: 1px solid #0077c8;
-            }
+            QComboBox:focus { border: 1px solid #0077c8; }
             QComboBox QAbstractItemView {
                 background-color: #ffffff;
                 color: #1a2a3a;
@@ -352,7 +361,7 @@ class AdminPanel(QWidget):
         """
         self.combo_target.setStyleSheet(combo_style)
         self.combo_section.setStyleSheet(combo_style)
-        self.combo_target.currentTextChanged.connect(self.update_section_options)
+        self.combo_target.currentTextChanged.connect(self.handle_target_change)
         self.update_section_options(self.combo_target.currentText())
 
         target_layout.addWidget(target_lbl)
@@ -405,15 +414,14 @@ class AdminPanel(QWidget):
             }
         """)
         btn_upload.clicked.connect(self.upload_pdf)
-
         self.file_label = QLabel("No PDF selected")
         self.file_label.setStyleSheet("color: #7f8c8d; font-style: italic; border: none; background: transparent;")
-
         pdf_layout.addWidget(btn_upload)
         pdf_layout.addWidget(self.file_label)
         pdf_layout.addStretch()
         form_layout.addLayout(pdf_layout)
 
+        action_layout = QHBoxLayout()
         btn_post = QPushButton("📢 Publish Notice")
         btn_post.setFixedHeight(38)
         btn_post.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -426,13 +434,30 @@ class AdminPanel(QWidget):
                 border: none;
                 font-size: 13px;
             }
-            QPushButton:hover {
-                background-color: #005fa3;
-            }
+            QPushButton:hover { background-color: #005fa3; }
         """)
         btn_post.clicked.connect(self.post_notice)
-        form_layout.addWidget(btn_post)
 
+        btn_history = QPushButton("ⓘ Notice History")
+        btn_history.setFixedHeight(38)
+        btn_history.setFixedWidth(140)
+        btn_history.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_history.setStyleSheet("""
+            QPushButton {
+                background-color: #e1f0fa;
+                color: #0066b2;
+                border-radius: 6px;
+                font-weight: bold;
+                border: 1px solid #b2d4ee;
+                font-size: 13px;
+            }
+            QPushButton:hover { background-color: #cbe3f5; }
+        """)
+        btn_history.clicked.connect(self.open_notice_history)
+
+        action_layout.addWidget(btn_post, 4)
+        action_layout.addWidget(btn_history, 1)
+        form_layout.addLayout(action_layout)
         layout.addWidget(form_card)
 
         list_lbl = QLabel("Active Notices (Auto-expires after 12h)")
@@ -462,6 +487,32 @@ class AdminPanel(QWidget):
         layout.addWidget(self.table_notices)
         self.load_notices()
 
+    def handle_target_change(self, target_text):
+        if target_text == "✏️ Custom Selection / Range...":
+            custom_text, ok = QInputDialog.getText(
+                self, 
+                "Custom Class Target", 
+                "Enter target class or range (e.g. 'Class 6, 8, 10' or 'Class 7-9'):"
+            )
+            if ok and custom_text.strip():
+                formatted_custom = custom_text.strip()
+                if not formatted_custom.lower().startswith("class"):
+                    formatted_custom = f"Class {formatted_custom}"
+                
+                # Check if it already exists in the dropdown
+                idx = self.combo_target.findText(formatted_custom)
+                if idx == -1:
+                    # Insert right above the custom trigger option
+                    insert_index = self.combo_target.count() - 1
+                    self.combo_target.insertItem(insert_index, formatted_custom)
+                    self.combo_target.setCurrentIndex(insert_index)
+                else:
+                    self.combo_target.setCurrentIndex(idx)
+            else:
+                self.combo_target.setCurrentIndex(0)
+        else:
+            self.update_section_options(target_text)
+
     def update_section_options(self, target_text):
         self.combo_section.clear()
         if target_text in ["Class 11-12", "Class 11", "Class 12"]:
@@ -483,15 +534,15 @@ class AdminPanel(QWidget):
     def post_notice(self):
         title = self.input_notice_title.text().strip()
         body = self.input_notice_body.toPlainText().strip()
-        target = self.combo_target.currentText().strip()
-        section = self.combo_section.currentText().strip()
+        target = self.combo_target.currentText()
+        section = self.combo_section.currentText()
+
+        if target == "✏️ Custom Selection / Range...":
+            QMessageBox.warning(self, "Warning", "Please specify a valid class target.")
+            return
 
         if not title:
             QMessageBox.warning(self, "Warning", "Please enter a notice title.")
-            return
-
-        if not target or target == "Custom Class...":
-            QMessageBox.warning(self, "Warning", "Please specify a valid Target Group/Class.")
             return
 
         notice_obj = {
@@ -513,9 +564,16 @@ class AdminPanel(QWidget):
         self.input_notice_body.clear()
         self.file_label.setText("No PDF selected")
         self.selected_pdf_path = None
-
         QMessageBox.information(self, "Success", "Notice published successfully!")
         self.load_notices()
+
+    def open_notice_history(self):
+        history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notice.py")
+        if os.path.exists(history_path):
+            subprocess.Popen([sys.executable, history_path], cwd=os.path.dirname(history_path))
+            self.close()
+        else:
+            QMessageBox.warning(self, "File Missing", "Could not find notice.py in the current directory.")
 
     def load_notices(self):
         data = self.read_data()
@@ -615,13 +673,10 @@ class AdminPanel(QWidget):
                 font-weight: bold;
                 border: none;
             }
-            QPushButton:hover {
-                background-color: #005fa3;
-            }
+            QPushButton:hover { background-color: #005fa3; }
         """)
         btn_add_sub.clicked.connect(self.add_substitution)
         form_layout.addWidget(btn_add_sub)
-
         layout.addWidget(form_card)
 
         self.table_subs = QTableWidget(0, 7)
@@ -681,7 +736,6 @@ class AdminPanel(QWidget):
 
         for inp in [self.sub_class, self.sub_sec, self.sub_period, self.sub_absent, self.sub_substitute]:
             inp.clear()
-
         self.load_substitutions()
 
     def load_substitutions(self):
@@ -744,11 +798,10 @@ class AdminPanel(QWidget):
                 border: 1px solid #b2d4ee;
                 font-size: 13px;
             }
-            QLineEdit:focus {
-                border: 2px solid #0077c8;
-            }
+            QLineEdit:focus { border: 2px solid #0077c8; }
         """
 
+        # Credentials Card
         creds_card = QFrame()
         creds_card.setStyleSheet(card_style)
         creds_layout = QVBoxLayout(creds_card)
@@ -791,16 +844,14 @@ class AdminPanel(QWidget):
                 border: none;
                 font-size: 13px;
             }
-            QPushButton:hover {
-                background-color: #005fa3;
-            }
+            QPushButton:hover { background-color: #005fa3; }
         """)
         btn_save_creds.clicked.connect(self.update_credentials)
         creds_layout.addWidget(btn_save_creds)
         creds_layout.addStretch()
-
         cards_layout.addWidget(creds_card, 1)
 
+        # Actions Card
         actions_card = QFrame()
         actions_card.setStyleSheet(card_style)
         actions_layout = QVBoxLayout(actions_card)
@@ -829,9 +880,7 @@ class AdminPanel(QWidget):
                 border: none;
                 font-size: 13px;
             }
-            QPushButton:hover {
-                background-color: #d68910;
-            }
+            QPushButton:hover { background-color: #d68910; }
         """)
         btn_help.clicked.connect(self.open_help_page)
         actions_layout.addWidget(btn_help)
@@ -848,9 +897,7 @@ class AdminPanel(QWidget):
                 border: none;
                 font-size: 13px;
             }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
+            QPushButton:hover { background-color: #c0392b; }
         """)
         btn_exit.clicked.connect(self.exit_to_adminpage)
         actions_layout.addWidget(btn_exit)
@@ -867,7 +914,6 @@ class AdminPanel(QWidget):
 
         actions_layout.addWidget(info_box)
         actions_layout.addStretch()
-
         cards_layout.addWidget(actions_card, 1)
 
         layout.addLayout(cards_layout)
@@ -876,7 +922,6 @@ class AdminPanel(QWidget):
     def update_credentials(self):
         new_id = self.input_new_id.text().strip()
         new_pass = self.input_new_pass.text().strip()
-
         if not new_id or not new_pass:
             QMessageBox.warning(self, "Warning", "Admin ID and Password cannot be empty.")
             return
@@ -900,31 +945,6 @@ class AdminPanel(QWidget):
         if os.path.exists(admin_page_path):
             subprocess.Popen([sys.executable, admin_page_path, "--exited"], cwd=os.path.dirname(admin_page_path))
         self.close()
-
-    def read_data(self):
-        try:
-            net_data = fetch_network_data(DATA_FILE)
-            if net_data:
-                return net_data
-        except Exception:
-            pass
-
-        if not os.path.exists(DATA_FILE):
-            return {}
-
-        try:
-            with open(DATA_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-
-    def save_data(self, data):
-        with open(DATA_FILE, "w") as f:
-            json.dump(data, f, indent=4)
-        try:
-            push_cloud_data(data)
-        except Exception as e:
-            print(f"Cloud sync error: {e}")
 
 
 if __name__ == "__main__":
