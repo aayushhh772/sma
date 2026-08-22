@@ -16,6 +16,7 @@ from PyQt6.QtCore import Qt, QTimer, QPointF, QDateTime
 from PyQt6.QtGui import QFont, QPixmap, QPainter, QPainterPath, QColor, QPen, QBrush
 
 from network_sync import push_cloud_data, fetch_network_data
+from help import HelpWindow
 
 DATA_FILE = "data.json"
 CREDENTIALS_FILE = "admin_credentials.json"
@@ -934,11 +935,13 @@ class AdminPanel(QWidget):
         )
 
     def open_help_page(self):
-        help_page_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "help.py")
-        if os.path.exists(help_page_path):
-            subprocess.Popen([sys.executable, help_page_path], cwd=os.path.dirname(help_page_path))
-        else:
-            QMessageBox.warning(self, "Help File Missing", "Could not find help.py in the current directory.")
+        if not hasattr(self, "help_window") or self.help_window is None:
+          self.help_window = HelpWindow(self)
+
+        self.hide()
+        self.help_window.show()
+        self.help_window.raise_()
+        self.help_window.activateWindow()
 
     def exit_to_adminpage(self):
         admin_page_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adminpage.py")
