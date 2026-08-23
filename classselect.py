@@ -12,7 +12,7 @@ from PyQt6.QtGui import QFont, QPainter, QLinearGradient, QRadialGradient, QColo
 from PyQt6.QtMultimedia import QSoundEffect
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ADMIN_PAGE_FILE = os.path.join(BASE_DIR, "adminpage.py")
+ADMIN_PAGE_FILE = os.path.join(BASE_DIR, "classroom.py")
 
 class FlowParticle:
     def __init__(self, width, height):
@@ -43,7 +43,7 @@ class FlowParticle:
 class ClassSelection(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SOS Hermann Gmeiner Secondary School Gandaki")
+        self.setWindowTitle("SOS Hermann Gmeiner School Gandaki")
         self.setMinimumSize(900, 600)
         self.resize(1200, 750)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
@@ -330,7 +330,7 @@ class ClassSelection(QWidget):
 
     def go_back(self):
         if not os.path.exists(ADMIN_PAGE_FILE):
-            QMessageBox.critical(self, "File Not Found", "adminpage.py was not found.")
+            QMessageBox.critical(self, "File Not Found", "classroom.py was not found.")
             return
         try:
             subprocess.Popen([sys.executable, ADMIN_PAGE_FILE], cwd=BASE_DIR)
