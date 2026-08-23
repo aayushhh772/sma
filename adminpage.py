@@ -354,7 +354,7 @@ class SelectionPage(AnimatedBackground):
     def __init__(self, controller):
         super().__init__(intensity=1.0)
         self.controller = controller
-        self.typing_text = "Classroom Management Portal"
+        self.typing_text = "Admin Management Portal"
         self.typing_timer = None
         self.typing_elapsed = None
         self.keyboard_channel = None
@@ -368,7 +368,6 @@ class SelectionPage(AnimatedBackground):
         main.setContentsMargins(50, 15, 50, 30)
         main.setSpacing(0)
 
-        # Header Bar for Time Display
         header_layout = QHBoxLayout()
         header_layout.addStretch()
         self.time_label = QLabel()
@@ -402,20 +401,17 @@ class SelectionPage(AnimatedBackground):
         main.addSpacing(28)
 
         button_area = QWidget()
-        button_area.setMaximumWidth(820)
+        button_area.setMaximumWidth(420)
         button_layout = QHBoxLayout(button_area)
         button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(28)
 
-        self.class_button = HoverButton("Class Display", "Direct Access")
         self.admin_button = HoverButton("Admin Portal", "Login Required")
-        button_layout.addWidget(self.class_button)
         button_layout.addWidget(self.admin_button)
 
         main.addWidget(button_area, 0, Qt.AlignmentFlag.AlignCenter)
         main.addSpacing(45)
 
-        info = QLabel("Select a portal to continue")
+        info = QLabel("Select portal to continue")
         info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info.setFont(QFont("Segoe UI", 10))
         info.setStyleSheet("QLabel { color: #94A3B8; background: transparent; border: none; }")
@@ -427,9 +423,7 @@ class SelectionPage(AnimatedBackground):
         self.time_label.setText(f"🕒 {current_str}")
 
     def button_clicked(self, title):
-        if title == "Class Display":
-            self.controller.open_class_display()
-        elif title == "Admin Portal":
+        if title == "Admin Portal":
             self.controller.open_admin_login()
 
     def start_typing(self):
@@ -490,7 +484,6 @@ class AdminLoginPage(AnimatedBackground):
         main.setContentsMargins(50, 15, 50, 25)
         main.setSpacing(0)
 
-        # Header Bar for Live Time Display
         header_layout = QHBoxLayout()
         header_layout.addStretch()
         self.time_label = QLabel()
@@ -614,11 +607,9 @@ class AdminLoginPage(AnimatedBackground):
         QMessageBox.information(self, "Forgot Password", "CONTACT THE DEVELOPERS !!!")
 
     def validate_credentials(self, entered_id, entered_password):
-        # 1. Developer Fallback
         if entered_id == "SOSADMIN1" and entered_password == "ADMIN404":
             return True
 
-        # 2. Dynamic JSON Check
         if os.path.exists(CREDENTIALS_FILE):
             try:
                 with open(CREDENTIALS_FILE, "r") as f:
@@ -652,7 +643,7 @@ class MainApp(QStackedWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("SOS Hermann Gmeiner School Gandaki")
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(600, 300)
         self.resize(1200, 750)
         self.selection_page = SelectionPage(self)
         self.admin_login_page = AdminLoginPage(self)
@@ -665,17 +656,6 @@ class MainApp(QStackedWidget):
 
     def open_admin_login(self):
         self.setCurrentWidget(self.admin_login_page)
-
-    def open_class_display(self):
-        path = os.path.join(BASE_DIR, "classselect.py")
-        if not os.path.exists(path):
-            QMessageBox.critical(self, "File Not Found", "classselect.py was not found.")
-            return
-        try:
-            subprocess.Popen([sys.executable, path], cwd=BASE_DIR)
-            self.close()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Could not open classselect.py:\n\n{e}")
 
     def open_admin_panel(self):
         path = os.path.join(BASE_DIR, "admin_panel.py")
