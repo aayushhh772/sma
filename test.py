@@ -133,59 +133,154 @@ class AttendanceHistoryDialog(QDialog):
         super().__init__(parent)
         self.current_class_name = current_class_name
         self.setWindowTitle(f"Attendance History - {self.current_class_name}")
-        self.resize(650, 500)
-        self.setStyleSheet("background-color: #E0F2FE; font-family: 'Segoe UI', sans-serif;")
+        self.resize(750, 520)
+        self.setStyleSheet("background-color: #EBF8FF; font-family: 'Segoe UI', sans-serif;")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(16)
-        title_label = QLabel(f"Present Students History ({self.current_class_name})")
-        title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        title_label.setStyleSheet("color: #0284C7; background: transparent;")
-        layout.addWidget(title_label)
+
+        # Summary Metrics Cards Row
+        cards_layout = QHBoxLayout()
+        cards_layout.setSpacing(14)
+
+        # Total Students Card
+        card_total = QFrame()
+        card_total.setStyleSheet("""
+            QFrame {
+                background-color: #FFFFFF;
+                border-radius: 8px;
+                border: 1px solid #E2E8F0;
+                border-left: 5px solid #0284C7;
+            }
+        """)
+        l1 = QVBoxLayout(card_total)
+        l1.setContentsMargins(12, 10, 12, 10)
+        lbl_t_title = QLabel("Total Students")
+        lbl_t_title.setStyleSheet("color: #64748B; font-weight: 600; font-size: 12px; border: none; background: transparent;")
+        self.lbl_total_val = QLabel("0")
+        self.lbl_total_val.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.lbl_total_val.setStyleSheet("color: #0284C7; border: none; background: transparent;")
+        l1.addWidget(lbl_t_title)
+        l1.addWidget(self.lbl_total_val)
+
+        # Present Card
+        card_present = QFrame()
+        card_present.setStyleSheet("""
+            QFrame {
+                background-color: #FFFFFF;
+                border-radius: 8px;
+                border: 1px solid #E2E8F0;
+                border-left: 5px solid #16A34A;
+            }
+        """)
+        l2 = QVBoxLayout(card_present)
+        l2.setContentsMargins(12, 10, 12, 10)
+        lbl_p_title = QLabel("Present")
+        lbl_p_title.setStyleSheet("color: #64748B; font-weight: 600; font-size: 12px; border: none; background: transparent;")
+        self.lbl_present_val = QLabel("0")
+        self.lbl_present_val.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.lbl_present_val.setStyleSheet("color: #16A34A; border: none; background: transparent;")
+        l2.addWidget(lbl_p_title)
+        l2.addWidget(self.lbl_present_val)
+
+        # Absent Card
+        card_absent = QFrame()
+        card_absent.setStyleSheet("""
+            QFrame {
+                background-color: #FFFFFF;
+                border-radius: 8px;
+                border: 1px solid #E2E8F0;
+                border-left: 5px solid #EF4444;
+            }
+        """)
+        l3 = QVBoxLayout(card_absent)
+        l3.setContentsMargins(12, 10, 12, 10)
+        lbl_a_title = QLabel("Absent")
+        lbl_a_title.setStyleSheet("color: #64748B; font-weight: 600; font-size: 12px; border: none; background: transparent;")
+        self.lbl_absent_val = QLabel("0")
+        self.lbl_absent_val.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.lbl_absent_val.setStyleSheet("color: #EF4444; border: none; background: transparent;")
+        l3.addWidget(lbl_a_title)
+        l3.addWidget(self.lbl_absent_val)
+
+        cards_layout.addWidget(card_total, 1)
+        cards_layout.addWidget(card_present, 1)
+        cards_layout.addWidget(card_absent, 1)
+        layout.addLayout(cards_layout)
+
+        # Attendance Table
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Roll No", "Student Name", "Date", "Status"])
+        self.table.setHorizontalHeaderLabels(["Student ID", "Student Name", "Status", "Time Marked"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
         self.table.setStyleSheet("""
             QTableWidget {
-                background-color: rgba(255, 255, 255, 0.9);
+                background-color: #FFFFFF;
                 color: #0F172A;
                 font-size: 13px;
-                border: 1px solid #7DD3FC;
-                border-radius: 8px;
+                border: 1px solid #CBD5E1;
+                border-radius: 4px;
             }
             QHeaderView::section {
-                background-color: #BAE6FD;
-                color: #0284C7;
-                font-weight: 800;
-                font-size: 12px;
+                background-color: #0284C7;
+                color: #FFFFFF;
+                font-weight: 700;
+                font-size: 13px;
                 border: none;
                 padding: 10px;
             }
             QTableWidget::item {
-                padding: 8px;
+                padding: 10px;
                 border-bottom: 1px solid #E2E8F0;
             }
         """)
         layout.addWidget(self.table)
         self.load_attendance_history()
+
     def load_attendance_history(self):
         records = []
         data = fetch_network_data(DATA_FILE)
+        
+        all_students_count = 0
+        present_count = 0
+        absent_count = 0
+
         if data and "attendance" in data:
             for rec in data["attendance"]:
-                if rec.get("class_name") == self.current_class_name and rec.get("status") == "Present":
+                if rec.get("class_name") == self.current_class_name:
+                    all_students_count += 1
+                    status = rec.get("status", "Absent")
+                    if status == "Present":
+                        present_count += 1
+                    else:
+                        absent_count += 1
                     records.append(rec)
-        # Sort sequentially by Roll Number
-        records.sort(key=lambda x: int(x.get("roll_no", 0)))
+
+        self.lbl_total_val.setText(str(all_students_count))
+        self.lbl_present_val.setText(str(present_count))
+        self.lbl_absent_val.setText(str(absent_count))
+
+        records.sort(key=lambda x: str(x.get("roll_no", x.get("student_id", ""))))
         self.table.setRowCount(len(records))
         for row, rec in enumerate(records):
-            self.table.setItem(row, 0, QTableWidgetItem(str(rec.get("roll_no", "-"))))
-            self.table.setItem(row, 1, QTableWidgetItem(str(rec.get("name", "-"))))
-            self.table.setItem(row, 2, QTableWidgetItem(str(rec.get("date", datetime.date.today().strftime("%Y-%m-%d")))))
-            self.table.setItem(row, 3, QTableWidgetItem(str(rec.get("status", "Present"))))
+            s_id = str(rec.get("student_id", rec.get("roll_no", "-")))
+            s_name = str(rec.get("name", "-"))
+            status = str(rec.get("status", "Present"))
+            time_marked = str(rec.get("time", rec.get("date", datetime.date.today().strftime("%Y-%m-%d"))))
+
+            self.table.setItem(row, 0, QTableWidgetItem(s_id))
+            self.table.setItem(row, 1, QTableWidgetItem(s_name))
+            
+            status_item = QTableWidgetItem(status)
+            if status == "Present":
+                status_item.setForeground(QColor("#16A34A"))
+            else:
+                status_item.setForeground(QColor("#EF4444"))
+            self.table.setItem(row, 2, status_item)
+            
+            self.table.setItem(row, 3, QTableWidgetItem(time_marked))
 class BubbleParticle:
     def __init__(self, w, h):
         self.reset(w, h, initial=True)
@@ -420,7 +515,7 @@ class ClassroomDashboard(QWidget):
             "Class 12 A": {1: {}, 2: {1: ("Maths", "KB"), 2: ("Maths", "PP"), 3: ("Chemistry", "MK"), 4: ("English", "BSB"), 5: ("Zoology", "SH"), 6: ("Nepali", "SRG"), 7: ("Physics", "JR"), 8: ("Botany", "BPP"), 9: ("Botany", "BPP")}, 3: {1: ("Physics", "SB"), 2: ("Zoology", "SH"), 3: ("Maths", "KB"), 4: ("English", "BSB"), 5: ("Zol PR, Che PR", "SH, BP"), 6: ("Chemistry", "PS"), 7: ("Physics", "PA"), 8: ("Nepali", "KK"), 9: ("Maths", "PP")}, 4: {1: ("Maths", "KB"), 2: ("Maths", "PP"), 3: ("Nepali", "SRG"), 4: ("Chemistry", "MK"), 5: ("Che PR, PHy PR", "PS, SB"), 6: ("English", "DRG"), 7: ("Zoology", "SH"), 8: ("Chemistry", "PB"), 9: ("Physics", "JR")}, 5: {1: ("Physics", "SB"), 2: ("Phy PR, Bot PR", "PA, BPP"), 3: ("Maths", "KB"), 4: ("English", "DRG"), 5: ("Bot PR, PHy PR", "PA, BPP"), 6: ("Chemistry", "MK"), 7: ("Physics", "JR"), 8: ("Botany", "BPP"), 9: ("Maths", "PP")}, 6: {1: ("Physics", "SB"), 2: ("Zoology", "SH"), 3: ("Maths", "KB"), 4: ("Botany", "BPP"), 5: ("Chemistry", "PB"), 6: ("MCQ's", "GR"), 7: ("Nepali", "KK"), 8: ("Chemistry", "PS"), 9: ("Physics", "PA")}, 7: {}},
             "Class 12 B": {1: {}, 2: {1: ("Nepali", "SRG"), 2: ("Chemistry", "MK"), 3: ("Chemistry", "PS"), 4: ("Maths", "KB"), 5: ("Physics", "TRS"), 6: ("Maths", "PP"), 7: ("Botany", "BPP"), 8: ("Chemistry", "PB"), 9: ("PHy PR, Che PR", "JR, MK")}, 3: {1: ("Chemistry", "PS"), 2: ("Maths", "PP"), 3: ("MCQ's", "GR"), 4: ("Maths", "KB"), 5: ("Chemistry", "MK"), 6: ("Zoology", "SH"), 7: ("Physics", "JR"), 8: ("Physics", "SB"), 9: ("English", "BSB")}, 4: {1: ("Nepali", "KK"), 2: ("Chemistry", "PS"), 3: ("Physics", "SB"), 4: ("Maths", "KB"), 5: ("Physics", "TRS"), 6: ("Zoology", "SH"), 7: ("Maths", "PP"), 8: ("English", "DRG"), 9: ("Che PR, Zol PR", "MK, SH")}, 5: {1: ("Maths", "KB"), 2: ("Zoology", "SH"), 3: ("English", "BSB"), 4: ("Chemistry", "PB"), 5: ("Nepali", "KK"), 6: ("Botany", "BPP"), 7: ("Botany", "BPP"), 8: ("Physics", "JR"), 9: ("Bot PR, PHy PR", "BPP, JR")}, 6: {1: ("Maths", "KB"), 2: ("Maths", "PP"), 3: ("Zoology", "SH"), 4: ("Nepali", "SRG"), 5: ("Botany", "BPP"), 6: ("Physics", "JR"), 7: ("Physics", "SB"), 8: ("English", "DRG"), 9: ("Chemistry", "MK")}, 7: {}},
             "Class 12 C": {1: {}, 2: {1: ("Computer", "KKC"), 2: ("Computer PR", "PKC"), 3: ("Computer", "PKC"), 4: ("Chemistry", "AP"), 5: ("PHy PR, Che PR", "JR, AP"), 6: ("Maths", "KB"), 7: ("Chemistry", "PB"), 8: ("English", "BSB"), 9: ("Maths", "PP")}, 3: {1: ("Computer", "PKC"), 2: ("Chemistry", "PB"), 3: ("Chemistry", "MK"), 4: ("Maths", "PP"), 5: ("Nepali", "SRG"), 6: ("Maths", "KB"), 7: ("Physics", "TRS"), 8: ("Physics", "RK"), 9: ("Physics", "JR")}, 4: {1: ("Computer", "KKC"), 2: ("Chemistry", "MK"), 3: ("MCQ's", "GR"), 4: ("Physics", "TRS"), 5: ("English", "DRG"), 6: ("Nepali", "KK"), 7: ("Physics", "JR"), 8: ("Maths", "KB"), 9: ("Maths", "PP")}, 5: {1: ("Computer", "KKC"), 2: ("Maths", "PP"), 3: ("Computer", "PKC"), 4: ("Physics", "TRS"), 5: ("Nepali", "SRG"), 6: ("Maths", "KB"), 7: ("Chemistry", "AP"), 8: ("Maths", "KB"), 9: ("Physics", "RK")}, 6: {1: ("Chemistry", "PB"), 2: ("Chemistry", "MK"), 3: ("Chemistry", "AP"), 4: ("English", "BSB"), 5: ("Che PR, PHy PR", "MK, RK"), 6: ("Maths", "KB"), 7: ("Physics", "RK"), 8: ("Nepali", "KK"), 9: ("Physics", "JR")}, 7: {}},
-            "Class 12 D": {1: {}, 2: {1: ("Chemistry", "PB"), 2: ("Maths", "KB"), 3: ("Computer", "KKC"), 4: ("Nepali II", "KK"), 5: ("Computer", "PKC"), 6: ("Physics", "JR"), 7: ("Chemistry", "MK"), 8: ("English", "DRG"), 9: ("Physics", "RK")}, 3: {1: ("Computer", "KKC"), 2: ("Maths", "KB"), 3: ("Physics", "SB"), 4: ("Nepali II", "SRG"), 5: ("English", "DRG"), 6: ("Chemistry", "AP"), 7: ("Maths", "PP"), 8: ("Physics", "JR"), 9: ("PHy PR, Che PR", "RK, MK")}, 4: {1: ("Chemistry", "PB"), 2: ("Maths", "KB"), 3: ("Chemistry", "AP"), 4: ("Maths", "PP"), 5: ("Computer", "PKC"), 6: ("Physics", "RK"), 7: ("Nepali", "SRG"), 8: ("Physics", "SB"), 9: ("English", "BSB")}, 5: {1: ("Computer PR", "PKC"), 2: ("Maths", "KB"), 3: ("Maths", "PP"), 4: ("English", "BSB"), 5: ("Chemistry", "MK"), 6: ("Physics", "RK"), 7: ("MCQ's", "GR"), 8: ("Nepali", "KK"), 9: ("Chemistry", "AP")}, 6: {1: ("Computer", "KKC"), 2: ("Maths", "KB"), 3: ("Chemistry", "PB"), 4: ("Maths", "PP"), 5: ("Computer", "PKC"), 6: ("Physics", "SB"), 7: ("Physics", "JR"), 8: ("Chemistry", "MK"), 9: ("Che PR, Phy PR", "AP, RK")}, 7: {}}
+            "Class 12 D": {1: {}, 2: {1: ("Chemistry", "PB"), 2: ("Maths", "KB"), 3: ("Computer", "KKC"), 4: ("Nepali II", "KK"), 5: ("Computer", "PKC"), 6: ("Physics", "JR"), 7: ("Chemistry", "MK"), 8: ("English", "DRG"), 9: ("Physics", "RK")}, 3: {1: ("Computer", "KKC"), 2: ("Maths", "KB"), 3: ("Physics", "SB"), 4: ("Nepali II", "SRG"), 5: ("English", "DRG"), 6: ("Chemistry", "AP"), 7: ("Maths", "PP"), 8: ("PHy PR, Che PR", "RK, MK")}, 4: {1: ("Chemistry", "PB"), 2: ("Maths", "KB"), 3: ("Chemistry", "AP"), 4: ("Maths", "PP"), 5: ("Computer", "PKC"), 6: ("Physics", "RK"), 7: ("Nepali", "SRG"), 8: ("Physics", "SB"), 9: ("English", "BSB")}, 5: {1: ("Computer PR", "PKC"), 2: ("Maths", "KB"), 3: ("Maths", "PP"), 4: ("English", "BSB"), 5: ("Chemistry", "MK"), 6: ("Physics", "RK"), 7: ("MCQ's", "GR"), 8: ("Nepali", "KK"), 9: ("Chemistry", "AP")}, 6: {1: ("Computer", "KKC"), 2: ("Maths", "KB"), 3: ("Chemistry", "PB"), 4: ("Maths", "PP"), 5: ("Computer", "PKC"), 6: ("Physics", "SB"), 7: ("Physics", "JR"), 8: ("Chemistry", "MK"), 9: ("Che PR, Phy PR", "AP, RK")}, 7: {}}
         }
         self.init_ui()
         self.start_listener()
