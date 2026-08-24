@@ -810,7 +810,7 @@ class AdminPanel(QWidget):
 
     def load_substitutions(self):
         data = self.read_data()
-        subs = [s for s in data.get("substitutions", []) if is_recent(s.get("timestamp"))]
+        subs = [s for s in data.get("substitutions", []) if is_recent(s.get("timestamp"), max_hours=12)]
         data["substitutions"] = subs
         self.save_data(data)
 
