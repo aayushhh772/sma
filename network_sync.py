@@ -2,281 +2,915 @@ import os
 import json
 import datetime
 import uuid
-from supabase import create_client, Client
+import asyncio
+import threading
+from urllib.parse import urlparse
+from urllib.request import urlopen, Request
 
-SUPABASE_URL = "https://bnhpestcxuisikkbhwkc.supabase.co"
-SUPABASE_KEY = "sb_publishable_LjCEE0ik3tcJBPpPqcESPw_31ImMTle"
+from supabase import (
+    create_client,
+    acreate_client,
+    Client,
+    AsyncClient,
+)
 
-NOTICE_BUCKET = "notice"
+
+SUPABASE_URL = (
+    "https://bnhpestcxuisikkbhwkc.supabase.co"
+)
+
+SUPABASE_KEY = (
+    "sb_publishable_LjCEE0ik3tcJBPpPqcESPw_31ImMTle"
+)
+
+NOTICE_BUCKET = "notices"
 
 local_cache_file = "data.json"
 attendance_sync_file = "attendance_sync.json"
 
+
 try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+    supabase: Client = create_client(
+        SUPABASE_URL,
+        SUPABASE_KEY
+    )
+
 except Exception as e:
-    print(f"Supabase initialization failed: {e}")
+
+    print(
+        f"Supabase initialization failed: {e}"
+    )
+
     supabase = None
+
+
 
 realtime_channel = None
 attendance_realtime_channel = None
 
+_realtime_threads = []
+_realtime_stop_events = []
+
+# Local mirror of cloud PDFs so the existing PyQt test.py can continue
+# to use QDesktopServices.fromLocalFile() exactly as before.
+PDF_CACHE_FOLDER = "pdfs"
+
+
+def _ensure_pdf_cache_folder():
+    try:
+        os.makedirs(
+            PDF_CACHE_FOLDER,
+            exist_ok=True
+        )
+    except Exception as error:
+        print(
+            f"Could not create PDF cache folder: {error}"
+        )
+
+
+def _safe_pdf_filename(
+    notice
+):
+    pdf_name = notice.get(
+        "pdf_name"
+    )
+
+    if pdf_name:
+        return os.path.basename(
+            str(pdf_name)
+        )
+
+    pdf_value = notice.get(
+        "pdf"
+    )
+
+    if pdf_value:
+        parsed = urlparse(
+            str(pdf_value)
+        )
+
+        name = os.path.basename(
+            parsed.path
+        )
+
+        if name:
+            return name
+
+    return "notice_attachment.pdf"
+
+
+def _materialize_notice_pdfs(
+    cloud_data
+):
+    """
+    Keep the cloud URL in pdf_url, but make pdf point to a local
+    cached copy so the existing test.py NoticeCard can open it
+    with QDesktopServices.fromLocalFile() without changing test.py.
+    """
+    if not isinstance(
+        cloud_data,
+        dict
+    ):
+        return cloud_data
+
+    _ensure_pdf_cache_folder()
+
+    notices = cloud_data.get(
+        "notices",
+        []
+    )
+
+    if not isinstance(
+        notices,
+        list
+    ):
+        return cloud_data
+
+    for notice in notices:
+
+        if not isinstance(
+            notice,
+            dict
+        ):
+            continue
+
+        pdf_value = notice.get(
+            "pdf"
+        )
+
+        if not isinstance(
+            pdf_value,
+            str
+        ):
+            continue
+
+        if not pdf_value.startswith(
+            (
+                "http://",
+                "https://"
+            )
+        ):
+            continue
+
+        try:
+
+            file_name = _safe_pdf_filename(
+                notice
+            )
+
+            destination = os.path.join(
+                PDF_CACHE_FOLDER,
+                file_name
+            )
+
+            # Add a collision-safe prefix using the URL path so two
+            # different cloud objects with the same filename do not
+            # overwrite one another.
+            parsed = urlparse(
+                pdf_value
+            )
+
+            cloud_basename = os.path.basename(
+                parsed.path
+            )
+
+            if cloud_basename:
+                file_name = os.path.basename(
+                    cloud_basename
+                )
+
+            destination = os.path.join(
+                PDF_CACHE_FOLDER,
+                file_name
+            )
+
+            should_download = True
+
+            if os.path.isfile(
+                destination
+            ):
+
+                try:
+
+                    should_download = (
+                        os.path.getsize(
+                            destination
+                        ) == 0
+                    )
+
+                except Exception:
+
+                    should_download = True
+
+            if should_download:
+
+                request = Request(
+                    pdf_value,
+                    headers={
+                        "User-Agent":
+                            "SOS-School-PDF-Cache/1.0"
+                    }
+                )
+
+                with urlopen(
+                    request,
+                    timeout=30
+                ) as response:
+
+                    content = response.read()
+
+                if not content:
+                    raise ValueError(
+                        "Cloud PDF response was empty."
+                    )
+
+                with open(
+                    destination,
+                    "wb"
+                ) as pdf_file:
+
+                    pdf_file.write(
+                        content
+                    )
+
+            notice["pdf_url"] = pdf_value
+            notice["pdf_local"] = os.path.abspath(
+                destination
+            )
+            notice["pdf_name"] = (
+                notice.get(
+                    "pdf_name"
+                )
+                or os.path.basename(
+                    destination
+                )
+            )
+
+            # IMPORTANT:
+            # test.py already expects notice["pdf"] to be a local path.
+            notice["pdf"] = os.path.abspath(
+                destination
+            )
+
+        except Exception as error:
+
+            print(
+                "Could not cache notice PDF "
+                f"{pdf_value}: {error}"
+            )
+
+    return cloud_data
+
+_realtime_stop_events = []
+
 
 # ============================================================
 # EXISTING SCHOOL DATA FUNCTIONS
-# DO NOT CHANGE THEIR PURPOSE
 # ============================================================
+
 def upload_notice_pdf(pdf_path):
-    """
-    Uploads a notice PDF to Supabase Storage and returns
-    the cloud URL that can be used by other devices.
-    """
 
     if not pdf_path:
         return None
 
     if not os.path.isfile(pdf_path):
-        print(f"PDF file not found: {pdf_path}")
+
+        print(
+            f"PDF file not found: {pdf_path}"
+        )
+
         return None
 
     if not supabase:
-        print("Supabase unavailable. PDF upload skipped.")
+
+        print(
+            "Supabase unavailable. PDF upload skipped."
+        )
+
         return None
 
     try:
-        original_name = os.path.basename(pdf_path)
 
-        # Create a unique filename so different notices
-        # never overwrite each other.
-        unique_name = f"{uuid.uuid4().hex}_{original_name}"
+        original_name = os.path.basename(
+            pdf_path
+        )
 
-        storage_path = f"notices/{unique_name}"
+        unique_name = (
+            f"{uuid.uuid4().hex}_{original_name}"
+        )
 
-        with open(pdf_path, "rb") as pdf_file:
+        storage_path = (
+            f"notices/{unique_name}"
+        )
+
+        with open(
+            pdf_path,
+            "rb"
+        ) as pdf_file:
+
             pdf_bytes = pdf_file.read()
 
-        supabase.storage.from_(NOTICE_BUCKET).upload(
-            storage_path,
-            pdf_bytes,
-            {
-                "content-type": "application/pdf",
-                "upsert": "true"
-            }
+        if not pdf_bytes:
+
+            print(
+                "PDF upload failed: selected PDF is empty."
+            )
+
+            return None
+
+        upload_result = (
+            supabase
+            .storage
+            .from_(NOTICE_BUCKET)
+            .upload(
+                storage_path,
+                pdf_bytes,
+                {
+                    "content-type": "application/pdf",
+                    "upsert": "false"
+                }
+            )
+        )
+
+        print(
+            "PDF upload result:",
+            upload_result
         )
 
         public_url = (
             supabase
             .storage
             .from_(NOTICE_BUCKET)
-            .get_public_url(storage_path)
+            .get_public_url(
+                storage_path
+            )
         )
 
-        print("PDF uploaded successfully.")
-        print("Storage path:", storage_path)
-        print("PDF URL:", public_url)
+        print(
+            "PDF uploaded successfully."
+        )
+
+        print(
+            "Bucket:",
+            NOTICE_BUCKET
+        )
+
+        print(
+            "Storage path:",
+            storage_path
+        )
+
+        print(
+            "Public URL:",
+            public_url
+        )
 
         return public_url
 
     except Exception as e:
-        print(f"PDF upload failed: {e}")
+
+        print(
+            "========================================"
+        )
+        print(
+            "PDF UPLOAD FAILED"
+        )
+        print(
+            "========================================"
+        )
+        print(
+            f"Bucket: {NOTICE_BUCKET}"
+        )
+        print(
+            f"PDF path: {pdf_path}"
+        )
+        print(
+            f"Error: {e}"
+        )
+        print(
+            "========================================"
+        )
+
         return None
 
-def push_cloud_data(data_dict):
-    """
-    Pushes notices/substitutions from the Admin Panel to Supabase.
 
-    PDFs are uploaded to Supabase Storage first.
-    The notice then stores the cloud PDF URL instead
-    of the computer's local PDF path.
-    """
+def push_cloud_data(data_dict):
 
     try:
-        # Make a separate copy so the original data structure
-        # is not unexpectedly modified while uploading.
-        cloud_data = json.loads(json.dumps(data_dict))
 
-        # --------------------------------------------------------
-        # UPLOAD NOTICE PDFs
-        # --------------------------------------------------------
+        cloud_data = json.loads(
+            json.dumps(data_dict)
+        )
 
-        notices = cloud_data.get("notices", [])
+        notices = cloud_data.get(
+            "notices",
+            []
+        )
 
         for notice in notices:
 
-            pdf_value = notice.get("pdf")
+            if not isinstance(
+                notice,
+                dict
+            ):
+                continue
+
+            pdf_value = notice.get(
+                "pdf"
+            )
 
             if not pdf_value:
                 continue
 
-            # Only upload if this is still a local file.
-            # If it is already an http/https URL, leave it alone.
-            if isinstance(pdf_value, str) and pdf_value.startswith(("http://", "https://")):
+            if (
+                isinstance(pdf_value, str)
+                and pdf_value.startswith(
+                    ("http://", "https://")
+                )
+            ):
                 continue
 
-            if os.path.isfile(pdf_value):
+            if (
+                isinstance(pdf_value, str)
+                and os.path.isfile(pdf_value)
+            ):
 
-                pdf_url = upload_notice_pdf(pdf_value)
+                pdf_url = upload_notice_pdf(
+                    pdf_value
+                )
 
                 if pdf_url:
-                    notice["pdf"] = pdf_url
 
-        # --------------------------------------------------------
-        # SAVE CLOUD-READY DATA TO LOCAL CACHE
-        # --------------------------------------------------------
+                    notice["pdf"] = (
+                        pdf_url
+                    )
+
+                    notice["pdf_name"] = (
+                        os.path.basename(
+                            pdf_value
+                        )
+                    )
+
+        for notice in notices:
+
+            if not isinstance(
+                notice,
+                dict
+            ):
+                continue
+
+            pdf_local = notice.get(
+                "pdf_local"
+            )
+
+            current_pdf = notice.get(
+                "pdf"
+            )
+
+            current_is_url = (
+                isinstance(
+                    current_pdf,
+                    str
+                )
+                and current_pdf.startswith(
+                    ("http://", "https://")
+                )
+            )
+
+            if (
+                not current_is_url
+                and pdf_local
+                and isinstance(pdf_local, str)
+                and os.path.isfile(pdf_local)
+            ):
+
+                pdf_url = upload_notice_pdf(
+                    pdf_local
+                )
+
+                if pdf_url:
+
+                    notice["pdf"] = (
+                        pdf_url
+                    )
+
+                    notice["pdf_name"] = (
+                        os.path.basename(
+                            pdf_local
+                        )
+                    )
 
         try:
-            with open(local_cache_file, "w", encoding="utf-8") as f:
-                json.dump(cloud_data, f, indent=4)
+
+            with open(
+                local_cache_file,
+                "w",
+                encoding="utf-8"
+            ) as f:
+
+                json.dump(
+                    cloud_data,
+                    f,
+                    indent=4,
+                    ensure_ascii=False
+                )
 
         except Exception as e:
-            print(f"Local cache save failed: {e}")
 
-        # --------------------------------------------------------
-        # SEND NOTICE/SUBSTITUTION DATA TO SUPABASE
-        # --------------------------------------------------------
+            print(
+                f"Local cache save failed: {e}"
+            )
 
         if supabase:
 
             try:
 
-                supabase.table("school_data").upsert(
-                    {
-                        "id": 1,
-                        "payload": cloud_data
-                    }
-                ).execute()
+                (
+                    supabase
+                    .table("school_data")
+                    .upsert(
+                        {
+                            "id": 1,
+                            "payload": cloud_data
+                        }
+                    )
+                    .execute()
+                )
 
-                print("Cloud data pushed successfully.")
+                print(
+                    "Cloud data pushed successfully."
+                )
 
             except Exception as e:
 
                 print(
-                    f"Cloud push failed, saved locally only: {e}"
+                    "Cloud push failed, saved locally only: "
+                    f"{e}"
                 )
 
     except Exception as e:
 
-        print(f"Cloud data processing failed: {e}")
+        print(
+            f"Cloud data processing failed: {e}"
+        )
 
-def fetch_network_data(data_filename="data.json"):
-    """Fetches the latest school_data payload."""
+
+def fetch_network_data(
+    data_filename="data.json"
+):
 
     if supabase:
+
         try:
+
             response = (
-                supabase.table("school_data")
+                supabase
+                .table("school_data")
                 .select("payload")
                 .eq("id", 1)
                 .execute()
             )
 
-            if response.data and len(response.data) > 0:
+            if (
+                response.data
+                and len(response.data) > 0
+            ):
 
-                cloud_data = response.data[0].get("payload")
+                cloud_data = (
+                    response
+                    .data[0]
+                    .get("payload")
+                )
 
                 if cloud_data is not None:
 
+                    cloud_data = _materialize_notice_pdfs(cloud_data)
+
                     try:
-                        with open(data_filename, "w", encoding="utf-8") as f:
-                            json.dump(cloud_data, f, indent=4)
+
+                        with open(
+                            data_filename,
+                            "w",
+                            encoding="utf-8"
+                        ) as f:
+
+                            json.dump(
+                                cloud_data,
+                                f,
+                                indent=4,
+                                ensure_ascii=False
+                            )
+
                     except Exception as e:
-                        print(f"Error saving cloud cache: {e}")
+
+                        print(
+                            "Error saving cloud cache: "
+                            f"{e}"
+                        )
 
                     return cloud_data
 
         except Exception as e:
-            print(f"Cloud fetch failed, using local cache: {e}")
 
-    if os.path.exists(data_filename):
+            print(
+                "Cloud fetch failed, using local cache: "
+                f"{e}"
+            )
+
+    if os.path.exists(
+        data_filename
+    ):
+
         try:
-            with open(data_filename, "r", encoding="utf-8") as f:
+
+            with open(
+                data_filename,
+                "r",
+                encoding="utf-8"
+            ) as f:
+
                 return json.load(f)
 
         except Exception as e:
-            print(f"Local cache read failed: {e}")
+
+            print(
+                f"Local cache read failed: {e}"
+            )
 
     return {}
 
 
 # ============================================================
 # EXISTING SCHOOL DATA REALTIME
+# Now implemented with Supabase async client.
+# Public function names are unchanged.
 # ============================================================
 
-def listen_for_updates(on_update_callback, data_filename="data.json"):
-    """
-    Listens for changes to school_data.
+def _extract_realtime_record(payload):
 
-    This keeps notices and substitutions synchronized
-    while the APK is open.
-    """
+    if not payload:
+        return {}
 
-    global realtime_channel
+    if hasattr(
+        payload,
+        "get"
+    ):
 
-    if not supabase:
-        print("Supabase client is not initialized. Realtime disabled.")
-        return
+        data = (
+            payload.get(
+                "data",
+                {}
+            )
+            or {}
+        )
 
-    def handle_change(payload):
+        if isinstance(
+            data,
+            dict
+        ):
 
-        try:
+            record = data.get(
+                "record"
+            )
 
-            if hasattr(payload, "get"):
-                new_record = payload.get("new", {}) or {}
-            else:
-                new_record = {}
+            if isinstance(
+                record,
+                dict
+            ):
 
-            record_id = new_record.get("id")
+                return record
 
-            if str(record_id) != "1":
-                return
+        new_record = (
+            payload.get(
+                "new",
+                {}
+            )
+            or {}
+        )
 
-            cloud_data = new_record.get("payload")
+        if isinstance(
+            new_record,
+            dict
+        ):
 
-            if cloud_data is None:
-                return
+            return new_record
 
-            try:
-                with open(data_filename, "w", encoding="utf-8") as f:
-                    json.dump(cloud_data, f, indent=4)
-            except Exception as e:
-                print(f"Error saving realtime cache: {e}")
+    return {}
 
-            try:
-                on_update_callback(cloud_data)
-            except Exception as e:
-                print(f"Realtime UI callback failed: {e}")
 
-        except Exception as e:
-            print(f"Error processing realtime update: {e}")
+async def _school_data_realtime_loop(
+    on_update_callback,
+    data_filename,
+    stop_event
+):
+
+    client = None
+    channel = None
 
     try:
 
-        if realtime_channel is not None:
-
-            try:
-                supabase.remove_channel(realtime_channel)
-            except Exception:
-                pass
-
-            realtime_channel = None
-
-        realtime_channel = supabase.channel("school_data_realtime")
-
-        realtime_channel.on_postgres_changes(
-            event="*",
-            schema="public",
-            table="school_data",
-            callback=handle_change
+        client: AsyncClient = (
+            await acreate_client(
+                SUPABASE_URL,
+                SUPABASE_KEY
+            )
         )
 
-        realtime_channel.subscribe()
+        async def handle_change(
+            payload
+        ):
 
-        print("Listening for real-time notice/substitution updates...")
+            try:
+
+                new_record = (
+                    _extract_realtime_record(
+                        payload
+                    )
+                )
+
+                if not new_record:
+                    return
+
+                record_id = (
+                    new_record.get(
+                        "id"
+                    )
+                )
+
+                if str(
+                    record_id
+                ) != "1":
+
+                    return
+
+                cloud_data = (
+                    new_record.get(
+                        "payload"
+                    )
+                )
+
+                if cloud_data is None:
+                    return
+
+                try:
+
+                    with open(
+                        data_filename,
+                        "w",
+                        encoding="utf-8"
+                    ) as f:
+
+                        json.dump(
+                            cloud_data,
+                            f,
+                            indent=4,
+                            ensure_ascii=False
+                        )
+
+                except Exception as e:
+
+                    print(
+                        "Error saving realtime cache: "
+                        f"{e}"
+                    )
+
+                try:
+
+                    on_update_callback(
+                        cloud_data
+                    )
+
+                except Exception as e:
+
+                    print(
+                        "Realtime UI callback failed: "
+                        f"{e}"
+                    )
+
+            except Exception as e:
+
+                print(
+                    "Error processing realtime update: "
+                    f"{e}"
+                )
+
+        channel = (
+            client
+            .channel(
+                "school_data_realtime"
+            )
+        )
+
+        channel = (
+            channel
+            .on_postgres_changes(
+                event="*",
+                schema="public",
+                table="school_data",
+                callback=handle_change
+            )
+        )
+
+        await channel.subscribe()
+
+        print(
+            "Listening for real-time "
+            "notice/substitution updates..."
+        )
+
+        while not stop_event.is_set():
+
+            await asyncio.sleep(
+                1
+            )
 
     except Exception as e:
 
-        print(f"Failed to start realtime listener: {e}")
-        realtime_channel = None
+        print(
+            "Failed to start realtime listener: "
+            f"{e}"
+        )
+
+    finally:
+
+        if channel is not None:
+
+            try:
+
+                await channel.unsubscribe()
+
+            except Exception:
+
+                pass
+
+        if client is not None:
+
+            try:
+
+                await client.close()
+
+            except Exception:
+
+                pass
+
+
+def _run_school_data_realtime(
+    on_update_callback,
+    data_filename,
+    stop_event
+):
+
+    try:
+
+        asyncio.run(
+            _school_data_realtime_loop(
+                on_update_callback,
+                data_filename,
+                stop_event
+            )
+        )
+
+    except Exception as e:
+
+        print(
+            "School realtime thread error: "
+            f"{e}"
+        )
+
+
+def listen_for_updates(
+    on_update_callback,
+    data_filename="data.json"
+):
+
+    stop_event = threading.Event()
+
+    thread = threading.Thread(
+        target=_run_school_data_realtime,
+        args=(
+            on_update_callback,
+            data_filename,
+            stop_event
+        ),
+        daemon=True,
+        name="SchoolSupabaseRealtime"
+    )
+
+    _realtime_stop_events.append(
+        stop_event
+    )
+
+    _realtime_threads.append(
+        thread
+    )
+
+    thread.start()
+
+    print(
+        "Supabase async school-data "
+        "realtime listener started."
+    )
 
 
 # ============================================================
@@ -284,38 +918,53 @@ def listen_for_updates(on_update_callback, data_filename="data.json"):
 # ============================================================
 
 def _load_last_attendance_sync():
-    """
-    Reads the timestamp of the last successful attendance sync.
-    """
 
     try:
 
-        if os.path.exists(attendance_sync_file):
+        if os.path.exists(
+            attendance_sync_file
+        ):
 
-            with open(attendance_sync_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            with open(
+                attendance_sync_file,
+                "r",
+                encoding="utf-8"
+            ) as f:
 
-                return data.get("last_sync")
+                data = json.load(
+                    f
+                )
+
+                return data.get(
+                    "last_sync"
+                )
 
     except Exception as e:
 
-        print(f"Could not read attendance sync timestamp: {e}")
+        print(
+            "Could not read attendance "
+            f"sync timestamp: {e}"
+        )
 
     return None
 
 
-def _save_last_attendance_sync(timestamp):
-    """
-    Saves the timestamp after a successful attendance synchronization.
-    """
+def _save_last_attendance_sync(
+    timestamp
+):
 
     try:
 
-        with open(attendance_sync_file, "w", encoding="utf-8") as f:
+        with open(
+            attendance_sync_file,
+            "w",
+            encoding="utf-8"
+        ) as f:
 
             json.dump(
                 {
-                    "last_sync": timestamp
+                    "last_sync":
+                        timestamp
                 },
                 f,
                 indent=4
@@ -323,64 +972,94 @@ def _save_last_attendance_sync(timestamp):
 
     except Exception as e:
 
-        print(f"Could not save attendance sync timestamp: {e}")
+        print(
+            "Could not save attendance "
+            f"sync timestamp: {e}"
+        )
 
 
 def fetch_attendance_catchup():
-    """
-    Called when the APK starts.
-
-    Downloads attendance records created since the last
-    successful synchronization.
-
-    If this is the first run, today's attendance is downloaded.
-    """
 
     if not supabase:
-        print("Supabase unavailable. Attendance catch-up skipped.")
+
+        print(
+            "Supabase unavailable. "
+            "Attendance catch-up skipped."
+        )
+
         return []
 
     try:
 
-        last_sync = _load_last_attendance_sync()
+        last_sync = (
+            _load_last_attendance_sync()
+        )
 
         query = (
             supabase
             .table("attendance")
             .select("*")
-            .order("created_at", desc=False)
+            .order(
+                "created_at",
+                desc=False
+            )
         )
 
         if last_sync:
 
-            query = query.gt("created_at", last_sync)
+            query = query.gt(
+                "created_at",
+                last_sync
+            )
 
             print(
-                f"Fetching attendance created after {last_sync}"
+                "Fetching attendance created "
+                f"after {last_sync}"
             )
 
         else:
 
-            today = datetime.datetime.now().date().isoformat()
-
-            query = query.eq("attendance_date", today)
-
-            print(
-                f"First attendance sync. Fetching today's attendance: {today}"
+            today = (
+                datetime.datetime
+                .now()
+                .date()
+                .isoformat()
             )
 
-        response = query.execute()
+            query = query.eq(
+                "attendance_date",
+                today
+            )
 
-        records = response.data or []
+            print(
+                "First attendance sync. "
+                "Fetching today's attendance: "
+                f"{today}"
+            )
 
-        now_utc = datetime.datetime.now(
-            datetime.timezone.utc
-        ).isoformat()
+        response = (
+            query.execute()
+        )
 
-        _save_last_attendance_sync(now_utc)
+        records = (
+            response.data or []
+        )
+
+        now_utc = (
+            datetime.datetime
+            .now(
+                datetime.timezone.utc
+            )
+            .isoformat()
+        )
+
+        _save_last_attendance_sync(
+            now_utc
+        )
 
         print(
-            f"Attendance catch-up complete: {len(records)} record(s)"
+            "Attendance catch-up complete: "
+            f"{len(records)} record(s)"
         )
 
         return records
@@ -395,26 +1074,32 @@ def fetch_attendance_catchup():
 
 
 def fetch_today_attendance():
-    """
-    Gets all attendance for today.
-
-    This is used for the attendance display.
-    It does NOT delete old attendance from Supabase.
-    """
 
     if not supabase:
+
         return []
 
     try:
 
-        today = datetime.datetime.now().date().isoformat()
+        today = (
+            datetime.datetime
+            .now()
+            .date()
+            .isoformat()
+        )
 
         response = (
             supabase
             .table("attendance")
             .select("*")
-            .eq("attendance_date", today)
-            .order("created_at", desc=False)
+            .eq(
+                "attendance_date",
+                today
+            )
+            .order(
+                "created_at",
+                desc=False
+            )
             .execute()
         )
 
@@ -429,98 +1114,173 @@ def fetch_today_attendance():
         return []
 
 
-def listen_for_attendance_updates(on_update_callback):
-    """
-    Listens to the existing attendance table.
+# ============================================================
+# ATTENDANCE REALTIME
+# Now implemented with Supabase async client.
+# Public function name is unchanged.
+# ============================================================
 
-    When the Admin Panel or another device creates/updates
-    attendance, the APK receives the change immediately.
-    """
+async def _attendance_realtime_loop(
+    on_update_callback,
+    stop_event
+):
 
-    global attendance_realtime_channel
+    client = None
+    channel = None
 
-    if not supabase:
+    try:
 
-        print(
-            "Supabase unavailable. Attendance realtime disabled."
+        client: AsyncClient = (
+            await acreate_client(
+                SUPABASE_URL,
+                SUPABASE_KEY
+            )
         )
 
-        return
-
-    def handle_attendance_change(payload):
-
-        try:
-
-            if hasattr(payload, "get"):
-
-                new_record = payload.get(
-                    "new",
-                    {}
-                ) or {}
-
-            else:
-
-                new_record = {}
-
-            if not new_record:
-
-                return
+        async def handle_attendance_change(
+            payload
+        ):
 
             try:
 
-                on_update_callback(new_record)
+                new_record = (
+                    _extract_realtime_record(
+                        payload
+                    )
+                )
+
+                if not new_record:
+                    return
+
+                try:
+
+                    on_update_callback(
+                        new_record
+                    )
+
+                except Exception as e:
+
+                    print(
+                        "Attendance UI callback failed: "
+                        f"{e}"
+                    )
 
             except Exception as e:
 
                 print(
-                    f"Attendance UI callback failed: {e}"
+                    "Attendance realtime processing error: "
+                    f"{e}"
                 )
 
-        except Exception as e:
+        channel = (
+            client
+            .channel(
+                "attendance_realtime"
+            )
+        )
 
-            print(
-                f"Attendance realtime processing error: {e}"
+        channel = (
+            channel
+            .on_postgres_changes(
+                event="*",
+                schema="public",
+                table="attendance",
+                callback=handle_attendance_change
+            )
+        )
+
+        await channel.subscribe()
+
+        print(
+            "Listening for real-time "
+            "attendance updates..."
+        )
+
+        while not stop_event.is_set():
+
+            await asyncio.sleep(
+                1
             )
 
-    try:
+    except Exception as e:
 
-        if attendance_realtime_channel is not None:
+        print(
+            "Failed to start attendance "
+            f"realtime listener: {e}"
+        )
+
+    finally:
+
+        if channel is not None:
 
             try:
 
-                supabase.remove_channel(
-                    attendance_realtime_channel
-                )
+                await channel.unsubscribe()
 
             except Exception:
 
                 pass
 
-            attendance_realtime_channel = None
+        if client is not None:
 
-        attendance_realtime_channel = (
-            supabase.channel(
-                "attendance_realtime"
+            try:
+
+                await client.close()
+
+            except Exception:
+
+                pass
+
+
+def _run_attendance_realtime(
+    on_update_callback,
+    stop_event
+):
+
+    try:
+
+        asyncio.run(
+            _attendance_realtime_loop(
+                on_update_callback,
+                stop_event
             )
-        )
-
-        attendance_realtime_channel.on_postgres_changes(
-            event="*",
-            schema="public",
-            table="attendance",
-            callback=handle_attendance_change
-        )
-
-        attendance_realtime_channel.subscribe()
-
-        print(
-            "Listening for real-time attendance updates..."
         )
 
     except Exception as e:
 
         print(
-            f"Failed to start attendance realtime listener: {e}"
+            "Attendance realtime thread error: "
+            f"{e}"
         )
 
-        attendance_realtime_channel = None
+
+def listen_for_attendance_updates(
+    on_update_callback
+):
+
+    stop_event = threading.Event()
+
+    thread = threading.Thread(
+        target=_run_attendance_realtime,
+        args=(
+            on_update_callback,
+            stop_event
+        ),
+        daemon=True,
+        name="AttendanceSupabaseRealtime"
+    )
+
+    _realtime_stop_events.append(
+        stop_event
+    )
+
+    _realtime_threads.append(
+        thread
+    )
+
+    thread.start()
+
+    print(
+        "Supabase async attendance "
+        "realtime listener started."
+    )
