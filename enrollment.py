@@ -411,35 +411,60 @@ class EnrollmentWindow(QWidget):
 
     def initialize_face_system(self):
         if self.face_app is not None:
-            try:
-                return True
-            except Exception:
-                pass
+            return True
 
         self.status.setText("Loading InsightFace buffalo_l...")
         QApplication.processEvents()
 
         try:
+            print("========================================")
+            print("Loading InsightFace buffalo_l...")
+            print("========================================")
+
             self.face_app = FaceAnalysis(
                 name="buffalo_l",
                 providers=["CPUExecutionProvider"]
             )
+
+            print("FaceAnalysis object created.")
+
             self.face_app.prepare(
                 ctx_id=-1,
                 det_size=DETECTION_SIZE
             )
+
+            print("InsightFace buffalo_l loaded successfully.")
+            print("========================================")
+
             return True
+
         except Exception as error:
+            import traceback
+
+            print()
+            print("========================================")
+            print("INSIGHTFACE MODEL ERROR")
+            print("========================================")
+            print(str(error))
+            print()
+            traceback.print_exc()
+            print("========================================")
+
+            self.face_app = None
+
             QMessageBox.critical(
                 self,
                 "Model Error",
-                f"Could not load the face recognition model.\n\n{error}"
+                "Could not load the facial recognition model.\n\n"
+                f"{type(error).__name__}: {error}\n\n"
+                "See the PyCharm Run console for the full error."
             )
+
             self.status.setText(
                 "Face recognition model failed to load."
             )
-            return False
 
+            return False
     def validate_student_information(self):
         name = self.name_input.text().strip()
         raw_id = self.student_id_input.text().strip()
