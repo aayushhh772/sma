@@ -6,6 +6,7 @@ import json
 import re
 import math
 import random
+import base64
 
 from network_sync import (
     fetch_network_data,
@@ -36,17 +37,14 @@ from facial_attendance import FacialAttendanceWindow
 from cal import CalendarWindow
 from attendancedisplaytest import AttendanceDisplayTest
 
-
 try:
     from database import process_scan
 except ImportError:
     def process_scan(code):
         pass
 
-
 DATA_FILE = "data.json"
 EXPIRATION_HOURS = 12
-
 
 def parse_iso_timestamp(ts_str):
     if not ts_str:
@@ -57,7 +55,6 @@ def parse_iso_timestamp(ts_str):
     except Exception:
         return None
 
-
 def is_recent(ts_str, max_hours=EXPIRATION_HOURS):
     dt = parse_iso_timestamp(ts_str)
 
@@ -67,7 +64,6 @@ def is_recent(ts_str, max_hours=EXPIRATION_HOURS):
     now = datetime.datetime.now()
 
     return (now - dt).total_seconds() < (max_hours * 3600)
-
 
 # ============================================================
 # REALTIME ADMIN DATA LISTENER
@@ -99,7 +95,6 @@ class RealtimeListenerThread(QThread):
     def stop(self):
         self.running = False
         self.quit()
-
 
 # ============================================================
 # ENROLLMENT LOGIN
@@ -247,7 +242,6 @@ class LoginDialog(QDialog):
                 "Invalid credentials. Please check username and password."
             )
 
-
 # ============================================================
 # ANIMATED BACKGROUND
 # ============================================================
@@ -337,7 +331,6 @@ class BubbleParticle:
                 initial=False
             )
 
-
 class AnimatedBubbleBackground(QWidget):
 
     def __init__(self, parent=None):
@@ -416,7 +409,6 @@ class AnimatedBubbleBackground(QWidget):
                 b.radius
             )
 
-
 # ============================================================
 # BARCODE LISTENER
 # ============================================================
@@ -449,6 +441,48 @@ class BarcodeListenerThread(QThread):
             except Exception:
                 break
 
+# ============================================================
+# NOTICE PDF HANDLING
+# ============================================================
+
+def get_notice_pdf_path(notice):
+    pdf_path = (
+        notice.get("pdf_local")
+        or notice.get("pdf")
+    )
+    if pdf_path and os.path.isfile(pdf_path):
+        return pdf_path
+
+    pdf_data = notice.get("pdf_data")
+    if not pdf_data:
+        return None
+
+    try:
+        folder = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "pdfs"
+        )
+        os.makedirs(folder, exist_ok=True)
+        name = os.path.basename(
+            notice.get("pdf_name") or "notice.pdf"
+        )
+        safe_name = re.sub(
+            r"[^A-Za-z0-9._-]",
+            "_",
+            name
+        )
+        destination = os.path.join(
+            folder,
+            safe_name
+        )
+        with open(destination, "wb") as pdf_file:
+            pdf_file.write(
+                base64.b64decode(pdf_data)
+            )
+        return destination
+    except Exception as error:
+        print(f"Could not restore notice PDF: {error}")
+        return None
 
 # ============================================================
 # NOTICE CARD
@@ -556,14 +590,11 @@ class NoticeCard(QFrame):
                 body_lbl
             )
 
-        pdf_path = self.notice_data.get(
-            "pdf"
+        pdf_path = get_notice_pdf_path(
+            self.notice_data
         )
 
-        if (
-            pdf_path
-            and os.path.exists(pdf_path)
-        ):
+        if pdf_path:
 
             pdf_btn = QPushButton(
                 f"Attachment: {os.path.basename(pdf_path)}"
@@ -639,7 +670,6 @@ class NoticeCard(QFrame):
         layout.addWidget(
             ts_lbl
         )
-
 
 # ============================================================
 # NOTIFICATION DIALOG
@@ -765,7 +795,6 @@ class NotificationDialog(QDialog):
         layout.addWidget(
             scroll
         )
-
 
 # ============================================================
 # CLASSROOM DASHBOARD
@@ -1356,9 +1385,6 @@ class ClassroomDashboard(QWidget):
                                5: ("Computer", "PKC"), 6: ("Physics", "SB"), 7: ("Physics", "JR"),
                                8: ("Chemistry", "MK"), 9: ("Che PR, Phy PR", "AP, RK")}, 7: {}}
         }
-
-
-
 
         # ----------------------------------------------------
         # INITIALIZE UI
@@ -3562,7 +3588,6 @@ class ClassroomDashboard(QWidget):
         app_layout.addWidget(
             main_content
         )
-
 
 # ============================================================
 # PROGRAM START
