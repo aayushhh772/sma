@@ -1,10 +1,13 @@
 import os
 import json
 import datetime
+import uuid
 from supabase import create_client, Client
 
 SUPABASE_URL = "https://bnhpestcxuisikkbhwkc.supabase.co"
 SUPABASE_KEY = "sb_publishable_LjCEE0ik3tcJBPpPqcESPw_31ImMTle"
+
+NOTICE_BUCKET = "notice"
 
 local_cache_file = "data.json"
 attendance_sync_file = "attendance_sync.json"
@@ -23,29 +26,137 @@ attendance_realtime_channel = None
 # EXISTING SCHOOL DATA FUNCTIONS
 # DO NOT CHANGE THEIR PURPOSE
 # ============================================================
+def upload_notice_pdf(pdf_path):
+    """
+    Uploads a notice PDF to Supabase Storage and returns
+    the cloud URL that can be used by other devices.
+    """
+
+    if not pdf_path:
+        return None
+
+    if not os.path.isfile(pdf_path):
+        print(f"PDF file not found: {pdf_path}")
+        return None
+
+    if not supabase:
+        print("Supabase unavailable. PDF upload skipped.")
+        return None
+
+    try:
+        original_name = os.path.basename(pdf_path)
+
+        # Create a unique filename so different notices
+        # never overwrite each other.
+        unique_name = f"{uuid.uuid4().hex}_{original_name}"
+
+        storage_path = f"notices/{unique_name}"
+
+        with open(pdf_path, "rb") as pdf_file:
+            pdf_bytes = pdf_file.read()
+
+        supabase.storage.from_(NOTICE_BUCKET).upload(
+            storage_path,
+            pdf_bytes,
+            {
+                "content-type": "application/pdf",
+                "upsert": "true"
+            }
+        )
+
+        public_url = (
+            supabase
+            .storage
+            .from_(NOTICE_BUCKET)
+            .get_public_url(storage_path)
+        )
+
+        print("PDF uploaded successfully.")
+        print("Storage path:", storage_path)
+        print("PDF URL:", public_url)
+
+        return public_url
+
+    except Exception as e:
+        print(f"PDF upload failed: {e}")
+        return None
 
 def push_cloud_data(data_dict):
-    """Pushes notices/substitutions from the Admin Panel to Supabase."""
+    """
+    Pushes notices/substitutions from the Admin Panel to Supabase.
+
+    PDFs are uploaded to Supabase Storage first.
+    The notice then stores the cloud PDF URL instead
+    of the computer's local PDF path.
+    """
+
     try:
-        with open(local_cache_file, "w", encoding="utf-8") as f:
-            json.dump(data_dict, f, indent=4)
-    except Exception as e:
-        print(f"Local cache save failed: {e}")
+        # Make a separate copy so the original data structure
+        # is not unexpectedly modified while uploading.
+        cloud_data = json.loads(json.dumps(data_dict))
 
-    if supabase:
+        # --------------------------------------------------------
+        # UPLOAD NOTICE PDFs
+        # --------------------------------------------------------
+
+        notices = cloud_data.get("notices", [])
+
+        for notice in notices:
+
+            pdf_value = notice.get("pdf")
+
+            if not pdf_value:
+                continue
+
+            # Only upload if this is still a local file.
+            # If it is already an http/https URL, leave it alone.
+            if isinstance(pdf_value, str) and pdf_value.startswith(("http://", "https://")):
+                continue
+
+            if os.path.isfile(pdf_value):
+
+                pdf_url = upload_notice_pdf(pdf_value)
+
+                if pdf_url:
+                    notice["pdf"] = pdf_url
+
+        # --------------------------------------------------------
+        # SAVE CLOUD-READY DATA TO LOCAL CACHE
+        # --------------------------------------------------------
+
         try:
-            supabase.table("school_data").upsert(
-                {
-                    "id": 1,
-                    "payload": data_dict
-                }
-            ).execute()
-
-            print("Cloud data pushed successfully.")
+            with open(local_cache_file, "w", encoding="utf-8") as f:
+                json.dump(cloud_data, f, indent=4)
 
         except Exception as e:
-            print(f"Cloud push failed, saved locally only: {e}")
+            print(f"Local cache save failed: {e}")
 
+        # --------------------------------------------------------
+        # SEND NOTICE/SUBSTITUTION DATA TO SUPABASE
+        # --------------------------------------------------------
+
+        if supabase:
+
+            try:
+
+                supabase.table("school_data").upsert(
+                    {
+                        "id": 1,
+                        "payload": cloud_data
+                    }
+                ).execute()
+
+                print("Cloud data pushed successfully.")
+
+            except Exception as e:
+
+                print(
+                    f"Cloud push failed, saved locally only: {e}"
+                )
+
+    except Exception as e:
+
+        print(f"Cloud data processing failed: {e}")
 
 def fetch_network_data(data_filename="data.json"):
     """Fetches the latest school_data payload."""
