@@ -618,8 +618,6 @@ class AttendanceDisplay(QWidget):
     def update_time_display(self):
         now_nepal = datetime.now(NEPAL_TIMEZONE)
 
-        # Windows-compatible date/time formatting.
-        # %d and %I may contain leading zeros, so remove them manually.
         day = str(now_nepal.day)
         hour = now_nepal.strftime("%I").lstrip("0")
 
@@ -685,13 +683,13 @@ class AttendanceDisplay(QWidget):
                 .execute()
             )
 
-            students = (
+            enrolled_students = (
                 students_response.data
                 or []
             )
 
             total_students = len(
-                students
+                enrolled_students
             )
 
             # -------------------------------------------------
@@ -762,7 +760,7 @@ class AttendanceDisplay(QWidget):
             )
 
             # -------------------------------------------------
-            # 6. Get ONLY actual attendance records
+            # 6. Fetch actual attendance records for date
             # -------------------------------------------------
 
             attendance_response = (
@@ -789,60 +787,42 @@ class AttendanceDisplay(QWidget):
                 or []
             )
 
+            # Map existing attendance by student_id
+            attendance_map = {}
+            for rec in attendance_records:
+                sid = str(rec.get("student_id", "")).strip()
+                if sid:
+                    attendance_map[sid] = rec
+
             # -------------------------------------------------
-            # 7. Calculate actual Present / Absent
+            # 7. Merge enrolled students with attendance
             # -------------------------------------------------
 
             present_count = 0
             absent_count = 0
-
             display_records = []
 
-            for record in attendance_records:
+            for student in enrolled_students:
+                student_id = str(student.get("student_id", "")).strip()
+                name = str(student.get("name", "")).strip()
 
-                status = str(
-                    record.get(
-                        "status",
-                        ""
-                    )
-                ).strip().upper()
-
-                # Ignore anything that is not
-                # actually PRESENT or ABSENT.
-                if status not in (
-                    "PRESENT",
-                    "ABSENT"
-                ):
-
-                    continue
-
-                student_id = str(
-                    record.get(
-                        "student_id",
-                        ""
-                    )
-                ).strip()
-
-                name = str(
-                    record.get(
-                        "name",
-                        ""
-                    )
-                ).strip()
-
-                time_marked = str(
-                    record.get(
-                        "attendance_time",
-                        ""
-                    )
-                ).strip()
+                if student_id in attendance_map:
+                    rec = attendance_map[student_id]
+                    status = str(rec.get("status", "")).strip().upper()
+                    time_marked = str(
+                        rec.get(
+                            "attendance_time",
+                            rec.get("time", "--")
+                        )
+                    ).strip() or "--"
+                else:
+                    status = "ABSENT"
+                    time_marked = "--"
 
                 if status == "PRESENT":
-
                     present_count += 1
-
-                elif status == "ABSENT":
-
+                else:
+                    status = "ABSENT"
                     absent_count += 1
 
                 display_records.append(
@@ -853,6 +833,11 @@ class AttendanceDisplay(QWidget):
                         "time_marked": time_marked
                     }
                 )
+
+            # Sort records: Present first, then by Student ID
+            display_records.sort(
+                key=lambda r: (0 if r["status"] == "PRESENT" else 1, r["student_id"])
+            )
 
             # -------------------------------------------------
             # 8. Update statistic cards
@@ -877,7 +862,7 @@ class AttendanceDisplay(QWidget):
             )
 
             # -------------------------------------------------
-            # 9. Put ONLY actual attendance into table
+            # 9. Populate Table with All Enrolled Students
             # -------------------------------------------------
 
             self.table.setRowCount(
@@ -920,19 +905,11 @@ class AttendanceDisplay(QWidget):
                     )
                 )
 
-            # -------------------------------------------------
-            # 10. If no attendance exists
-            # -------------------------------------------------
-
             if len(display_records) == 0:
-
-                self.table.setRowCount(
-                    0
-                )
 
                 self.date_label.setText(
                     f"Date: {selected_date} "
-                    f"- No attendance recorded yet"
+                    f"- No enrolled students found"
                 )
 
             else:
