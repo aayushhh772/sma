@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOS Hermann Gmeiner School Gandaki Admin Panel</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;font-family:"Segoe UI",Arial,sans-serif;color:#1a2a3a}
+body{overflow:hidden;background:#eaf5fc}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+#app{position:relative;width:100%;height:100%;overflow:hidden;background:#eaf5fc}
+canvas{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+.shell{position:relative;z-index:1;width:100%;height:100%;display:flex}
+.sidebar{width:260px;min-width:260px;height:100%;background:rgba(255,255,255,.95);border-right:1px solid #cbe3f5;padding:15px;display:flex;flex-direction:column}
+.logo-wrap{display:flex;justify-content:center;margin-bottom:10px}
+.logo{width:65px;height:65px;object-fit:contain}
+.school-box{width:100%;min-height:120px;background:#0077c8;border-radius:10px;padding:18px 10px;border:0;display:flex;align-items:center;justify-content:center;margin-top:-80px}
+.school-box div{width:100%;font-size:16px;font-weight:700;color:#fff;text-align:center;line-height:1.3}
+.mid-card{background:#e1f0fa;border-radius:8px;border:1px solid #b2d4ee;padding:16px 8px;margin:12px 0 15px;min-height:60px;display:flex;align-items:center;justify-content:center}
+.mid-card div{text-align:center;color:#004080;font-size:8px;font-weight:700}
+.nav{display:flex;flex-direction:column;gap:8px;margin-top:55px}
+.nav button{height:40px;border:0;border-radius:6px;text-align:left;padding-left:12px;font-weight:700;font-size:13px;background:transparent;color:#2c3e50}
+.nav button:hover{background:#e1f0fa;color:#0066b2}
+.nav button.active{background:#0077c8;color:#fff}
+.spacer{flex:1}
+.content{flex:1;min-width:0;height:100%;display:flex;flex-direction:column}
+.header{height:45px;min-height:45px;border-bottom:1px solid #cbe3f5;display:flex;align-items:center;padding:0 20px;background:transparent}
+.title{font-size:11px;font-weight:700;color:#0066b2}
+.time{margin-left:auto;font-size:11px;font-weight:700;color:#004080}
+.sync-dot{margin-left:12px;font-size:11px;font-weight:700}
+.sync-dot.ok{color:#198754}
+.sync-dot.bad{color:#c0392b}
+.pages{flex:1;min-height:0;overflow:auto;padding:0}
+.page{display:none;padding:20px 25px 30px;min-height:100%}
+.page.active{display:block}
+h1{font-size:16px;color:#004080;margin:0 0 15px;font-weight:700}
+.card{background:rgba(255,255,255,.95);border-radius:10px;border:1px solid #cbe3f5;padding:18px}
+.row{display:flex;gap:12px;align-items:center}
+.wrap{flex-wrap:wrap}
+label{font-weight:700;color:#2c3e50;font-size:13px}
+input,textarea,select{background:#fff;color:#1a2a3a;border:1px solid #b2d4ee;border-radius:5px;padding:6px 8px;outline:none}
+input:focus,textarea:focus,select:focus{border:1px solid #0077c8}
+input,select{height:34px}
+textarea{resize:none}
+.notice-title{width:100%;margin-top:12px;height:36px}
+.notice-body{width:100%;height:100px;margin-top:10px;padding-top:9px;padding-bottom:9px}
+.action-row{display:flex;gap:10px;align-items:center;margin-top:12px}
+.btn-primary{background:#0077c8;color:#fff;border:0;border-radius:5px;font-weight:700;padding:9px 16px}
+.btn-primary:hover{background:#005fa3}
+.btn-secondary{background:#e1f0fa;color:#0066b2;border:1px solid #b2d4ee;border-radius:5px;font-weight:700;padding:9px 16px}
+.btn-secondary:hover{background:#cbe3f5}
+.btn-warn{background:#f39c12;color:#fff;border:0;border-radius:5px;font-weight:700;padding:9px 14px}
+.btn-warn:hover{background:#d68910}
+.btn-danger{background:#e74c3c;color:#fff;border:0;border-radius:4px;padding:4px 8px;font-weight:700}
+.btn-link{background:transparent;border:0;color:#0066b2;font-weight:700;text-decoration:underline;padding:0}
+.section-head{font-size:10px;font-weight:700;color:#004080;margin:18px 0 10px}
+.table-wrap{width:100%;overflow:auto;background:#fff;border-radius:8px;border:1px solid #cbe3f5;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+table{width:100%;border-collapse:collapse;min-width:720px;background:#fff}
+thead,tbody,tr,td{background:#fff}
+th{background:#0077c8;color:#fff;padding:8px;font-weight:700;font-size:12px;text-align:left}
+td{padding:8px;border-top:1px solid #e1f0fa;font-size:12px}
+td a.pdf-link{color:#0066b2;font-weight:700;text-decoration:underline}
+.settings-grid{display:flex;flex-direction:column;gap:18px;width:100%}
+.settings-grid>.card{width:100%;flex:none}
+.muted{font-size:9px;color:#64748b}
+.status{background:#e1f0fa;border:1px solid #b2d4ee;border-radius:6px;padding:9px;color:#004080;font-size:8px;font-weight:700;margin-top:10px}
+.file-name{font-size:12px;color:#7f8c8d;font-style:italic}
+.history-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.history-toolbar input,.history-toolbar select{min-width:160px}
+.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.35);display:none;align-items:center;justify-content:center;z-index:20}
+.modal-backdrop.show{display:flex}
+.modal{width:min(900px,94vw);max-height:90vh;overflow:auto;background:#fff;border:1px solid #cbe3f5;border-radius:12px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.2)}
+.modal h2{margin:0 0 12px;color:#004080;font-size:18px}
+.modal-body{font-size:13px}
+.toast{position:fixed;right:20px;bottom:20px;background:#004080;color:#fff;padding:10px 14px;border-radius:8px;display:none;z-index:30;font-size:13px}
+.toast.show{display:block}
+.empty{padding:22px;text-align:center;color:#64748b;background:#fff}
+.att-card{min-height:420px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:20px}
+@media(max-width:850px){
+.sidebar{width:210px;min-width:210px}
+.row{align-items:stretch}
+.settings-grid{flex-direction:column}
+#page-notices .row{flex-direction:column;align-items:stretch}
+.action-row{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<canvas id="bg"></canvas>
+<div class="shell">
+<aside class="sidebar">
+<div class="logo-wrap"><img id="logo" class="logo" src="logo.png" alt="SOS SMA logo" onerror="this.style.visibility='hidden'"></div>
+<div class="school-box"><div>SOS Hermann Gmeiner<br>School Gandaki</div></div>
+<div class="mid-card"><div>● Portal Active &amp; Synced</div></div>
+<nav class="nav">
+<button data-page="notices" class="active"> Notices &amp; PDFs</button>
+<button data-page="subs"> Substitutions</button>
+<button data-page="attendance"> Attendance Section</button>
+<button data-page="settings"> Settings</button>
+</nav>
+<div class="spacer"></div>
+</aside>
+
+<main class="content">
+<header class="header">
+<div class="title">Administrative Control Center</div>
+<div class="time" id="timeLabel"></div>
+<div class="sync-dot" id="syncLabel">● connecting</div>
+</header>
+
+<section class="pages">
+
+<div id="page-notices" class="page active">
+<h1>Publish Notice &amp; Attach PDF</h1>
+<div class="card">
+<div class="row wrap">
+<label for="target">Target Group:</label>
+<select id="target"></select>
+<label for="section">Section:</label>
+<select id="section"></select>
+</div>
+<input id="noticeTitle" class="notice-title" placeholder="Notice Title">
+<textarea id="noticeBody" class="notice-body" placeholder="Write the notice content here..."></textarea>
+
+<div class="action-row">
+<input id="pdf" type="file" accept=".pdf" hidden>
+<button class="btn-secondary" id="uploadBtn"> Select PDF Document</button>
+<span class="file-name" id="fileLabel">No PDF selected</span>
+</div>
+
+<div class="action-row">
+<button class="btn-primary" id="postBtn"> Publish Notice</button>
+<button class="btn-secondary" id="historyBtn"> Notice History</button>
+</div>
+</div>
+
+<div class="section-head">Active Notices (Auto-expires after 12h)</div>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Target</th><th>Title</th><th>PDF Attachment</th><th>Date / Time</th><th>Action</th></tr></thead>
+<tbody id="noticeTable"></tbody>
+</table>
+</div>
+</div>
+
+<div id="page-subs" class="page">
+<h1>Manage Daily Substitutions</h1>
+<div class="card">
+<div class="row wrap">
+<input id="subClass" placeholder="Class (e.g. 6)">
+<input id="subSec" placeholder="Sec (e.g. A)">
+<input id="subPeriod" placeholder="Period (1-8)">
+<input id="subAbsent" placeholder="Absent Teacher">
+<input id="subSubstitute" placeholder="Substitute Teacher">
+<button class="btn-primary" id="addSubBtn">Add</button>
+</div>
+</div>
+<div style="height:10px"></div>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Class</th><th>Sec</th><th>Period</th><th>Absent Teacher</th><th>Substitute</th><th>Date / Time</th><th>Action</th></tr></thead>
+<tbody id="subTable"></tbody>
+</table>
+</div>
+</div>
+
+<div id="page-attendance" class="page">
+<h1>Class &amp; Section Attendance Portal</h1>
+<div class="card att-card">
+<div class="row">
+<label for="attClass">Select Class:</label>
+<select id="attClass"></select>
+</div>
+<div class="row">
+<label for="attSec">Select Section:</label>
+<select id="attSec"></select>
+</div>
+<button class="btn-primary" style="width:260px;height:45px;font-size:14px" id="enterAttendance"> Enter Attendance Display</button>
+</div>
+</div>
+
+<div id="page-settings" class="page">
+<h1>System Settings &amp; Configuration</h1>
+<div class="settings-grid">
+<div class="card">
+<h3 style="margin:0;color:#004080;font-size:14px">Admin Authentication Credentials</h3>
+<div class="muted" style="margin:7px 0 12px">Update login credentials saved to the existing backend configuration.</div>
+<input id="newAdminId" placeholder="New Admin ID" style="width:100%;margin-bottom:8px">
+<input id="newAdminPass" placeholder="New Password" type="password" style="width:100%;margin-bottom:8px">
+<button class="btn-primary" id="saveCreds">Update Credentials</button>
+</div>
+<div class="card">
+<h3 style="margin:0;color:#004080;font-size:14px">System Operations &amp; Maintenance</h3>
+<div class="muted" style="margin:7px 0 12px">Quick system controls, help user manual, and session exit.</div>
+<button class="btn-warn" id="helpBtn" style="width:100%;margin-bottom:8px">Launch User Manual / Help Guide</button>
+<button class="btn-danger" id="logoutBtn" style="width:100%;height:36px">Logout &amp; Return to Portal</button>
+<div class="status" id="statusBox">System Status: Connecting...<br>Supabase / API status will appear here.</div>
+</div>
+</div>
+</div>
+
+</section>
+</main>
+</div>
+
+<div class="modal-backdrop" id="modal">
+<div class="modal">
+<h2 id="modalTitle"></h2>
+<div class="modal-body" id="modalBody"></div>
+<div style="text-align:right;margin-top:15px"><button class="btn-secondary" id="modalClose">Close</button></div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+/*
+  Browser replacement for the PyQt AdminPanel.
+
+  IMPORTANT:
+  This page does NOT try to reimplement database.py/network_sync.py in JS.
+  It calls the FastAPI bridge, which imports the same Python modules.
+  Therefore test.py and the other Python files can keep using the same
+  Python backend and Supabase data.
+*/
+const API_BASE =
+  window.ADMIN_API_BASE ||
+  localStorage.getItem("ADMIN_API_BASE") ||
+  "http://127.0.0.1:8000";
+
+const EXPIRATION_HOURS = 12;
+const TARGETS = [
+  "Class 6-12","Class 6-10","Class 11-12",
+  "Class 6","Class 7","Class 8","Class 9","Class 10",
+  "Class 11","Class 12","Custom Selection / Range..."
+];
+
+const $ = id => document.getElementById(id);
+
+function esc(v){
+  return String(v ?? "").replace(/[&<>"']/g,m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[m]));
+}
+
+function parseISO(v){
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+}
+function fmt(d){
+  return d.toLocaleDateString(undefined,{month:"short",day:"2-digit"})+
+    ", "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit",hour12:true});
+}
+function recent(v,max=EXPIRATION_HOURS){
+  const d=parseISO(v);
+  return !d || (Date.now()-d.getTime()) < max*3600000;
+}
+function toast(msg){
+  $("toast").textContent=msg;
+  $("toast").classList.add("show");
+  setTimeout(()=>$("toast").classList.remove("show"),2500);
+}
+function modal(title,html){
+  $("modalTitle").textContent=title;
+  $("modalBody").innerHTML=html;
+  $("modal").classList.add("show");
+}
+$("modalClose").onclick=()=>$("modal").classList.remove("show");
+$("modal").onclick=e=>{if(e.target.id==="modal")$("modal").classList.remove("show")};
+
+function readableError(value){
+  if(value === null || value === undefined){
+    return "";
+  }
+
+  if(typeof value === "string"){
+    return value;
+  }
+
+  if(value instanceof Error){
+    return value.message || String(value);
+  }
+
+  try{
+    if(typeof value === "object"){
+      if(typeof value.detail === "string"){
+        return value.detail;
+      }
+
+      if(typeof value.message === "string"){
+        return value.message;
+      }
+
+      return JSON.stringify(value, null, 2);
+    }
+  }catch(_e){}
+
+  return String(value);
+}
+
+async function api(path, options={}){
+  let res;
+
+  try{
+    res = await fetch(API_BASE + path, {
+      ...options,
+      headers: {
+        ...(options.body instanceof FormData ? {} : {"Content-Type":"application/json"}),
+        ...(options.headers || {})
+      }
+    });
+  }catch(error){
+    throw new Error(
+      "Could not connect to the API at " +
+      API_BASE +
+      ". Make sure api.py is running.\n\n" +
+      readableError(error)
+    );
+  }
+
+  const text = await res.text();
+
+  let data = {};
+
+  try{
+    data = text ? JSON.parse(text) : {};
+  }catch{
+    data = {
+      detail: text
+    };
+  }
+
+  if(!res.ok){
+    const details =
+      readableError(
+        data.detail ??
+        data.message ??
+        data
+      ) ||
+      `HTTP ${res.status}`;
+
+    throw new Error(details);
+  }
+
+  return data;
+}
+
+/* -----------------------------
+   DATA
+----------------------------- */
+async function loadCloudData(){
+  const data = await api("/api/admin/data");
+  return data && data.data ? data.data : (data || {});
+}
+async function saveCloudData(data){
+  return await api("/api/admin/data",{
+    method:"POST",
+    body:JSON.stringify({payload:data})
+  });
+}
+async function health(){
+  const result = await api("/api/health");
+  $("syncLabel").textContent = "● Supabase connected";
+  $("syncLabel").className = "sync-dot ok";
+  $("statusBox").innerHTML =
+    `System Status: Active &amp; Synced<br>
+     Database: ${esc(result.database || "available")}<br>
+     Network Sync: ${esc(result.network_sync || "available")}`;
+}
+async function refreshAll(){
+  try{
+    const data = await loadCloudData();
+    renderNotices(data.notices || []);
+    renderSubs(data.substitutions || []);
+    $("syncLabel").textContent = "● Supabase connected";
+    $("syncLabel").className = "sync-dot ok";
+  }catch(e){
+    $("syncLabel").textContent = "● backend unavailable";
+    $("syncLabel").className = "sync-dot bad";
+    $("statusBox").textContent = "System Status: Backend unavailable — " + e.message;
+  }
+}
+
+/* -----------------------------
+   NOTICE TARGETS
+----------------------------- */
+function setupTargets(){
+  $("target").innerHTML = TARGETS.map(x=>`<option>${esc(x)}</option>`).join("");
+  updateSections($("target").value);
+}
+function updateSections(target){
+  let sections;
+  if(["Class 11-12","Class 11","Class 12"].includes(target))
+    sections=["All Sections","Section A","Section B","Section C","Section D"];
+  else if(["Class 6-10","Class 6","Class 7","Class 8","Class 9","Class 10"].includes(target))
+    sections=["All Sections","Section A","Section B"];
+  else
+    sections=["All Sections","Section A","Section B","Section C","Section D"];
+  $("section").innerHTML=sections.map(x=>`<option>${esc(x)}</option>`).join("");
+}
+$("target").onchange=()=>{
+  const target=$("target").value;
+  if(target==="Custom Selection / Range..."){
+    const custom=prompt("Enter target class or range (e.g. 'Class 6, 8, 10' or 'Class 7-9'):");
+    if(custom&&custom.trim()){
+      let formatted=custom.trim();
+      if(!formatted.toLowerCase().startsWith("class")) formatted="Class "+formatted;
+      let opt=[...$("target").options].find(o=>o.text===formatted);
+      if(!opt){
+        opt=document.createElement("option");
+        opt.text=formatted;
+        $("target").insertBefore(opt,$("target").lastElementChild);
+      }
+      $("target").value=formatted;
+      updateSections(formatted);
+    }else $("target").selectedIndex=0;
+  }else updateSections(target);
+};
+
+/* -----------------------------
+   TIMESTAMP COMPATIBILITY
+   -----------------------------
+   Matches the original admin_panel.py format:
+   datetime.datetime.now().isoformat()
+
+   The browser's native toISOString() adds a trailing Z and
+   creates a timezone-aware timestamp. test.py expects a
+   timezone-naive timestamp, so do not use toISOString() for
+   notices/substitutions.
+----------------------------- */
+function nowLocalNaiveISO(){
+
+  const now = new Date();
+
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-CA",
+      {
+        timeZone:"Asia/Kathmandu",
+        year:"numeric",
+        month:"2-digit",
+        day:"2-digit",
+        hour:"2-digit",
+        minute:"2-digit",
+        second:"2-digit",
+        hourCycle:"h23"
+      }
+    ).formatToParts(now);
+
+  const values = {};
+
+  parts.forEach(part=>{
+    if(part.type !== "literal"){
+      values[part.type] = part.value;
+    }
+  });
+
+  return (
+    `${values.year}-${values.month}-${values.day}` +
+    `T${values.hour}:${values.minute}:${values.second}`
+  );
+}
+
+/* -----------------------------
+   PDF
+----------------------------- */
+let selectedPdfUrl = null;
+let selectedPdfName = null;
+
+$("uploadBtn").onclick=()=>$("pdf").click();
+$("pdf").onchange=async()=>{
+  const file=$("pdf").files[0];
+  if(!file) return;
+  try{
+    const fd=new FormData();
+    fd.append("file",file,file.name);
+    const result=await fetch(API_BASE+"/api/admin/upload-pdf",{method:"POST",body:fd});
+    const data=await result.json();
+    if(!result.ok) throw new Error(data.detail || data.message || "PDF upload failed.");
+    selectedPdfUrl=data.url || data.pdf_url;
+    selectedPdfName=data.filename || file.name;
+    $("fileLabel").textContent=`PDF: ${selectedPdfName}`;
+    toast("PDF uploaded successfully.");
+  }catch(e){
+    selectedPdfUrl=null;
+    selectedPdfName=null;
+    $("fileLabel").textContent="No PDF selected";
+    modal("PDF Upload Error",`<pre style="white-space:pre-wrap;font-family:Segoe UI,Arial,sans-serif;">${esc(readableError(e))}</pre>`);
+  }
+};
+
+/* -----------------------------
+   NOTICE CREATE / LIST
+----------------------------- */
+$("postBtn").onclick=async()=>{
+  const title=$("noticeTitle").value.trim();
+  const body=$("noticeBody").value.trim();
+  const target=$("target").value;
+  const section=$("section").value;
+  if(target==="Custom Selection / Range..."){
+    modal("Warning","Please specify a valid class target."); return;
+  }
+  if(!title){
+    modal("Warning","Please enter a notice title."); return;
+  }
+
+  try{
+    const data=await loadCloudData();
+    if(!data.notices) data.notices=[];
+    data.notices.push({
+      title,
+      content:body,
+      target,
+      section,
+      pdf:selectedPdfUrl,
+      pdf_local:null,
+      pdf_name:selectedPdfName,
+      pdf_data:null,
+      timestamp:nowLocalNaiveISO()
+    });
+    await saveCloudData(data);
+
+    $("noticeTitle").value="";
+    $("noticeBody").value="";
+    $("fileLabel").textContent="No PDF selected";
+    $("pdf").value="";
+    selectedPdfUrl=null;
+    selectedPdfName=null;
+    toast("Notice published successfully.");
+    await refreshAll();
+  }catch(e){
+    modal("Publish Error",`<pre style="white-space:pre-wrap;font-family:Segoe UI,Arial,sans-serif;">${esc(readableError(e))}</pre>`);
+  }
+};
+
+function renderNotices(all){
+  const notices=(all||[]).filter(n=>recent(n.timestamp));
+  const tbody=$("noticeTable");
+  tbody.innerHTML="";
+  if(!notices.length){
+    tbody.innerHTML='<tr><td colspan="5" class="empty">No active notices.</td></tr>';
+    return;
+  }
+  notices.forEach((n,i)=>{
+    const tr=document.createElement("tr");
+    const d=parseISO(n.timestamp);
+    const pdfSource=n.pdf_url || n.pdf; const pdfUrl=pdfSource && /^https?:\/\//i.test(pdfSource) ? pdfSource : null;
+    const pdfName=n.pdf_name || (n.pdf ? String(n.pdf).split("/").pop() : null);
+    const pdfCell=pdfUrl
+      ? `<a class="pdf-link" href="${esc(pdfUrl)}" target="_blank" rel="noopener noreferrer">${esc(pdfName||"Document.pdf")}</a>`
+      : `<span>${esc(pdfName||"None")}</span>`;
+    tr.innerHTML=`
+      <td>${esc(`${n.target||""} (${n.section||""})`)}</td>
+      <td>${esc(n.title||"")}</td>
+      <td>${pdfCell}</td>
+      <td>${d?fmt(d):"Recently"}</td>
+      <td><button class="btn-danger">Delete</button></td>`;
+    tr.querySelector("button").onclick=async()=>{
+      try{
+        const data=await loadCloudData();
+        if(data.notices){
+          const idx=data.notices.findIndex(x=>x===n || (
+            x.title===n.title && x.timestamp===n.timestamp
+          ));
+          if(idx>=0){
+            data.notices.splice(idx,1);
+            await saveCloudData(data);
+            await refreshAll();
+          }
+        }
+      }catch(e){modal("Delete Error",`<pre style="white-space:pre-wrap;font-family:Segoe UI,Arial,sans-serif;">${esc(readableError(e))}</pre>`);}
+    };
+    tbody.appendChild(tr);
+  });
+}
+
+$("historyBtn").onclick=async()=>{
+  try{
+    const data=await loadCloudData();
+    const notices=data.notices||[];
+    const rows=notices.map(n=>{
+      const d=parseISO(n.timestamp);
+      const pdfSource=n.pdf_url || n.pdf; const pdfUrl=pdfSource && /^https?:\/\//i.test(pdfSource) ? pdfSource : null;
+      const pdfName=n.pdf_name || (n.pdf ? String(n.pdf).split("/").pop() : "None");
+      return `<tr>
+        <td>${esc(`${n.target||""} (${n.section||""})`)}</td>
+        <td>${esc(n.title||"")}</td>
+        <td>${esc(n.content||"")}</td>
+        <td>${pdfUrl?`<a class="pdf-link" href="${esc(pdfUrl)}" target="_blank" rel="noopener noreferrer">${esc(pdfName)}</a>`:esc(pdfName)}</td>
+        <td>${d?d.toLocaleString():"N/A"}</td>
+      </tr>`;
+    }).join("");
+    modal("Managed Notice Archive (Cloud Synced)",`
+      <div class="table-wrap">
+      <table style="min-width:900px">
+      <thead><tr><th>Target</th><th>Notice Title</th><th>Content Body</th><th>PDF Attachment</th><th>Timestamp</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="empty">No notice records.</td></tr>'}</tbody>
+      </table></div>`);
+  }catch(e){modal("History Error",esc(e.message));}
+};
+
+/* -----------------------------
+   SUBSTITUTIONS
+----------------------------- */
+function updatePeriodPlaceholder(){
+  $("subPeriod").placeholder=["11","12"].includes($("subClass").value.trim())?"Period (1-9)":"Period (1-8)";
+}
+$("subClass").oninput=updatePeriodPlaceholder;
+
+$("addSubBtn").onclick=async()=>{
+  const c=$("subClass").value.trim();
+  const s=$("subSec").value.trim();
+  const p=$("subPeriod").value.trim();
+  const a=$("subAbsent").value.trim();
+  const st=$("subSubstitute").value.trim();
+  if(!(c&&s&&p&&st)){
+    modal("Warning","Please fill in required substitution fields."); return;
+  }
+  try{
+    const data=await loadCloudData();
+    if(!data.substitutions) data.substitutions=[];
+    data.substitutions.push({
+      class:c,section:s,period:p,absent:a,substitute:st,
+      timestamp:nowLocalNaiveISO()
+    });
+    await saveCloudData(data);
+    ["subClass","subSec","subPeriod","subAbsent","subSubstitute"].forEach(id=>$(id).value="");
+    toast("Substitution added.");
+    await refreshAll();
+  }catch(e){modal("Substitution Error",`<pre style="white-space:pre-wrap;font-family:Segoe UI,Arial,sans-serif;">${esc(readableError(e))}</pre>`);}
+};
+
+function renderSubs(all){
+  const subs=(all||[]).filter(s=>recent(s.timestamp));
+  const tbody=$("subTable");
+  tbody.innerHTML="";
+  if(!subs.length){
+    tbody.innerHTML='<tr><td colspan="7" class="empty">No active substitutions.</td></tr>';
+    return;
+  }
+  subs.forEach(s=>{
+    const tr=document.createElement("tr");
+    const d=parseISO(s.timestamp);
+    tr.innerHTML=`
+      <td>${esc(s.class||"")}</td>
+      <td>${esc(s.section||"")}</td>
+      <td>${esc(s.period||"")}</td>
+      <td>${esc(s.absent||"")}</td>
+      <td>${esc(s.substitute||"")}</td>
+      <td>${d?fmt(d):"Recently"}</td>
+      <td><button class="btn-danger">Delete</button></td>`;
+    tr.querySelector("button").onclick=async()=>{
+      try{
+        const data=await loadCloudData();
+        if(data.substitutions){
+          const idx=data.substitutions.findIndex(x=>x===s || (
+            x.class===s.class && x.section===s.section &&
+            x.period===s.period && x.timestamp===s.timestamp
+          ));
+          if(idx>=0){
+            data.substitutions.splice(idx,1);
+            await saveCloudData(data);
+            await refreshAll();
+          }
+        }
+      }catch(e){modal("Delete Error",`<pre style="white-space:pre-wrap;font-family:Segoe UI,Arial,sans-serif;">${esc(readableError(e))}</pre>`);}
+    };
+    tbody.appendChild(tr);
+  });
+}
+
+/* -----------------------------
+   ATTENDANCE
+----------------------------- */
+function setupAttendance(){
+  $("attClass").innerHTML=Array.from({length:7},(_,i)=>`<option>Class ${i+6}</option>`).join("");
+  updateAttSections($("attClass").value);
+}
+$("attClass").onchange=()=>updateAttSections($("attClass").value);
+function updateAttSections(c){
+  const arr=["Class 11","Class 12"].includes(c)
+    ? ["Section A","Section B","Section C","Section D"]
+    : ["Section A","Section B"];
+  $("attSec").innerHTML=arr.map(x=>`<option>${x}</option>`).join("");
+}
+$("enterAttendance").onclick=()=>{
+  const c=$("attClass").value;
+  const s=$("attSec").value;
+  window.location.href="attendancedisplay.html?class="+encodeURIComponent(c)+"&section="+encodeURIComponent(s);
+};
+
+/* -----------------------------
+   CREDENTIALS / HELP / LOGOUT
+----------------------------- */
+async function loadCreds(){
+  try{
+    const d=await api("/api/admin/credentials");
+    const c=d.credentials || d;
+    $("newAdminId").value=c.admin_id || "";
+    $("newAdminPass").value=c.password || "";
+  }catch{}
+}
+$("saveCreds").onclick=async()=>{
+  const id=$("newAdminId").value.trim();
+  const pw=$("newAdminPass").value.trim();
+  if(!id||!pw){modal("Warning","Admin ID and Password cannot be empty.");return;}
+  try{
+    await api("/api/admin/credentials",{method:"POST",body:JSON.stringify({
+      admin_id:id,password:pw
+    })});
+    toast("Admin credentials updated successfully.");
+  }catch(e){modal("Save Error",`<pre style="white-space:pre-wrap;font-family:Segoe UI,Arial,sans-serif;">${esc(readableError(e))}</pre>`);}
+};
+$("helpBtn").onclick=()=>window.location.href="help.html";
+$("logoutBtn").onclick=()=>{
+  if(confirm("Are you sure you want to log out of the classroom system?")){
+    window.location.href="adminpage.html";
+  }
+};
+
+/* -----------------------------
+   NAV / CLOCK
+----------------------------- */
+document.querySelectorAll(".nav button").forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    $("page-"+btn.dataset.page).classList.add("active");
+  };
+});
+
+function updateTime(){
+  const d=new Date();
+  $("timeLabel").textContent=
+    d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})+
+    ", "+
+    d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit",hour12:true});
+}
+setInterval(updateTime,1000);
+updateTime();
+
+/* -----------------------------
+   BACKGROUND
+----------------------------- */
+const canvas=$("bg"),ctx=canvas.getContext("2d");
+let bubbles=[],phase=0;
+function resizeCanvas(){
+  canvas.width=innerWidth*devicePixelRatio;
+  canvas.height=innerHeight*devicePixelRatio;
+  canvas.style.width=innerWidth+"px";
+  canvas.style.height=innerHeight+"px";
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  if(!bubbles.length) bubbles=Array.from({length:25},()=>new Bubble(innerWidth,innerHeight));
+}
+class Bubble{
+  constructor(w,h){this.reset(w,h,true)}
+  reset(w,h,first){
+    this.x=Math.random()*w;
+    this.y=first?Math.random()*h:h+10+Math.random()*40;
+    this.r=12+Math.random()*23;
+    this.speed=.4+Math.random()*.8;
+    this.opacity=25+Math.random()*50;
+    this.ws=.02+Math.random()*.03;
+    this.w=Math.random()*6.28;
+  }
+  update(w,h){
+    this.y-=this.speed;
+    this.w+=this.ws;
+    this.x+=Math.sin(this.w)*.5;
+    if(this.y<-this.r*2)this.reset(w,h,false);
+  }
+}
+function wave(h,off,amp,freq,alpha){
+  ctx.beginPath();ctx.moveTo(0,h);ctx.lineTo(0,off);
+  for(let x=0;x<=innerWidth;x+=10)ctx.lineTo(x,off+Math.sin(x*freq+phase)*amp);
+  ctx.lineTo(innerWidth,h);ctx.closePath();
+  ctx.fillStyle=`rgba(0,150,220,${alpha})`;ctx.fill();
+}
+function animateBg(){
+  ctx.clearRect(0,0,innerWidth,innerHeight);
+  ctx.fillStyle="#eaf5fc";ctx.fillRect(0,0,innerWidth,innerHeight);
+  wave(innerHeight,innerHeight*.45,25,.008,.10);
+  wave(innerHeight,innerHeight*.55,35,.005,.08);
+  wave(innerHeight,innerHeight*.65,20,.01,.12);
+  for(const b of bubbles){
+    b.update(innerWidth,innerHeight);
+    ctx.beginPath();ctx.fillStyle=`rgba(255,255,255,${b.opacity/255})`;ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.fillStyle=`rgba(0,150,220,${b.opacity/255*.4})`;ctx.arc(b.x-b.r*.3,b.y-b.r*.3,b.r*.35,0,Math.PI*2);ctx.fill();
+  }
+  phase+=.02;requestAnimationFrame(animateBg);
+}
+addEventListener("resize",resizeCanvas);
+resizeCanvas();
+animateBg();
+
+/* -----------------------------
+   STARTUP + LIVE CROSS-DEVICE REFRESH
+----------------------------- */
+setupTargets();
+setupAttendance();
+loadCreds();
+health().catch(()=>{});
+refreshAll();
+
+setInterval(refreshAll,2000);
+</script>
+</body>
+</html>
