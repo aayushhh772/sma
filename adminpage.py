@@ -510,16 +510,16 @@ class AdminLoginPage(AnimatedBackground):
         subtitle.setFont(QFont("Segoe UI", 15))
         subtitle.setStyleSheet("QLabel { color: #64748B; background: transparent; border: none; }")
         main.addWidget(subtitle)
-        main.addSpacing(20)
+        main.addSpacing(15)
 
         card = QFrame()
-        card.setFixedSize(700, 480)
+        card.setFixedWidth(700)
         card.setStyleSheet(
             "QFrame { background-color: rgba(255, 255, 255, 242); border: 1px solid #BAE6FD; border-radius: 22px; }"
         )
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(50, 24, 50, 24)
-        card_layout.setSpacing(8)
+        card_layout.setContentsMargins(50, 20, 50, 20)
+        card_layout.setSpacing(6)
 
         username_label = QLabel("Admin ID")
         username_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
@@ -528,10 +528,11 @@ class AdminLoginPage(AnimatedBackground):
 
         self.username = QLineEdit()
         self.username.setPlaceholderText("Enter your Admin ID")
-        self.username.setFixedHeight(50)
+        self.username.setFixedHeight(45)
         self.username.setStyleSheet(self.input_style())
+        self.username.returnPressed.connect(self.login)
         card_layout.addWidget(self.username)
-        card_layout.addSpacing(4)
+        card_layout.addSpacing(2)
 
         password_label = QLabel("Password")
         password_label.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
@@ -541,17 +542,18 @@ class AdminLoginPage(AnimatedBackground):
         self.password = QLineEdit()
         self.password.setPlaceholderText("Enter your password")
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setFixedHeight(50)
+        self.password.setFixedHeight(45)
         self.password.setStyleSheet(self.input_style())
+        self.password.returnPressed.connect(self.login)
         card_layout.addWidget(self.password)
-        card_layout.addSpacing(12)
+        card_layout.addSpacing(8)
 
         login = QPushButton("Login")
         login.setCursor(Qt.CursorShape.PointingHandCursor)
-        login.setFixedHeight(48)
+        login.setFixedHeight(44)
         login.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         login.setStyleSheet(
-            "QPushButton { background-color: #0284C7; color: white; border: none; border-radius: 10px; padding: 10px; }"
+            "QPushButton { background-color: #0284C7; color: white; border: none; border-radius: 10px; padding: 8px; }"
             "QPushButton:hover { background-color: #0369A1; }"
             "QPushButton:pressed { background-color: #075985; }"
         )
@@ -560,7 +562,7 @@ class AdminLoginPage(AnimatedBackground):
 
         forgot_pwd = QPushButton("Forgot password?")
         forgot_pwd.setCursor(Qt.CursorShape.PointingHandCursor)
-        forgot_pwd.setFixedHeight(32)
+        forgot_pwd.setFixedHeight(28)
         forgot_pwd.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         forgot_pwd.setStyleSheet(
             "QPushButton { background-color: transparent; color: #E11D48; border: none; }"
@@ -571,10 +573,10 @@ class AdminLoginPage(AnimatedBackground):
 
         back = QPushButton("Back")
         back.setCursor(Qt.CursorShape.PointingHandCursor)
-        back.setFixedHeight(42)
+        back.setFixedHeight(38)
         back.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         back.setStyleSheet(
-            "QPushButton { background-color: transparent; color: #0284C7; border: 1px solid #BAE6FD; border-radius: 9px; padding: 6px; }"
+            "QPushButton { background-color: transparent; color: #0284C7; border: 1px solid #BAE6FD; border-radius: 9px; padding: 4px; }"
             "QPushButton:hover { background-color: #F0F9FF; border: 1px solid #0284C7; color: #0369A1; }"
             "QPushButton:pressed { background-color: #E0F2FE; }"
         )
@@ -582,7 +584,7 @@ class AdminLoginPage(AnimatedBackground):
         card_layout.addWidget(back)
 
         main.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
-        main.addSpacing(25)
+        main.addSpacing(15)
 
         school_name = QLabel("SOS Hermann Gmeiner School Gandaki")
         school_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
