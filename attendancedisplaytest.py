@@ -296,15 +296,23 @@ class AttendanceDisplayTest(QWidget):
 
     def load_attendance(self):
         """
-        Fetch attendance directly from the existing Supabase table.
-
-        On first opening, this loads all records created while the APK
-        was closed. While open, the timer refreshes the same table so
-        newly added attendance appears automatically.
+        Fetch all enrolled students and merge with attendance table.
+        Students without attendance records default to ABSENT.
         """
-
         try:
-            response = (
+            # 1. Fetch all enrolled students for this class/section
+            students_res = (
+                supabase
+                .table("students")
+                .select("student_id, name")
+                .eq("class_number", self.class_number)
+                .eq("section", self.section)
+                .execute()
+            )
+            enrolled_students = students_res.data or []
+
+            # 2. Fetch existing attendance records
+            attendance_res = (
                 supabase
                 .table("attendance")
                 .select("*")
@@ -312,47 +320,48 @@ class AttendanceDisplayTest(QWidget):
                 .eq("section", self.section)
                 .execute()
             )
+            attendance_records = attendance_res.data or []
 
-            records = response.data or []
+            # Map attendance records by student_id
+            attendance_map = {}
+            for rec in attendance_records:
+                sid = str(rec.get("student_id", "")).strip()
+                if sid:
+                    attendance_map[sid] = rec
 
             display_records = []
+            present_count = 0
+            absent_count = 0
 
-            for record in records:
+            # 3. Build merged list for all enrolled students
+            for student in enrolled_students:
+                student_id = str(student.get("student_id", "")).strip()
+                name = str(student.get("name", "")).strip()
 
-                status = str(
-                    record.get("status", "")
-                ).strip().upper()
-
-                if status not in ("PRESENT", "ABSENT"):
-                    continue
-
-                student_id = str(
-                    record.get("student_id", "")
-                ).strip()
-
-                name = str(
-                    record.get("name", "")
-                ).strip()
-
-                time_marked = str(
-                    record.get(
-                        "attendance_time",
-                        record.get(
-                            "time",
-                            record.get(
-                                "created_at",
-                                record.get(
-                                    "attendance_date",
-                                    ""
+                if student_id in attendance_map:
+                    rec = attendance_map[student_id]
+                    status = str(rec.get("status", "")).strip().upper()
+                    time_marked = str(
+                        rec.get(
+                            "attendance_time",
+                            rec.get(
+                                "time",
+                                rec.get(
+                                    "created_at",
+                                    rec.get("attendance_date", "--")
                                 )
                             )
                         )
-                    )
-                ).strip()
+                    ).strip() or "--"
+                else:
+                    status = "ABSENT"
+                    time_marked = "--"
 
-                attendance_date = str(
-                    record.get("attendance_date", "")
-                ).strip()
+                if status == "PRESENT":
+                    present_count += 1
+                else:
+                    status = "ABSENT"
+                    absent_count += 1
 
                 display_records.append(
                     {
@@ -360,25 +369,20 @@ class AttendanceDisplayTest(QWidget):
                         "name": name,
                         "time_marked": time_marked,
                         "status": status,
-                        "attendance_date": attendance_date,
                     }
                 )
 
+            # Sort records: Present first, then by Student ID
             display_records.sort(
-                key=lambda r: (
-                    r.get("attendance_date", ""),
-                    r.get("time_marked", ""),
-                ),
-                reverse=True,
+                key=lambda r: (0 if r["status"] == "PRESENT" else 1, r["student_id"])
             )
 
+            # 4. Populate GUI Table
             sorting = self.table.isSortingEnabled()
-
             self.table.setSortingEnabled(False)
             self.table.setRowCount(len(display_records))
 
             for row, record in enumerate(display_records):
-
                 values = (
                     record["student_id"],
                     record["name"],
@@ -387,95 +391,43 @@ class AttendanceDisplayTest(QWidget):
                 )
 
                 for column, value in enumerate(values):
-
                     item = QTableWidgetItem(value)
-
-                    item.setFont(
-                        QFont("Segoe UI", 10)
-                    )
-
-                    self.table.setItem(
-                        row,
-                        column,
-                        item
-                    )
+                    item.setFont(QFont("Segoe UI", 10))
+                    self.table.setItem(row, column, item)
 
                 status_item = self.table.item(row, 3)
-
                 if status_item:
-
                     if record["status"] == "PRESENT":
-
-                        status_item.setForeground(
-                            QColor("#16A34A")
-                        )
-
+                        status_item.setForeground(QColor("#16A34A"))
                     else:
-
-                        status_item.setForeground(
-                            QColor("#DC2626")
-                        )
-
+                        status_item.setForeground(QColor("#DC2626"))
                     status_item.setFont(
-                        QFont(
-                            "Segoe UI",
-                            10,
-                            QFont.Weight.Bold
-                        )
+                        QFont("Segoe UI", 10, QFont.Weight.Bold)
                     )
 
             self.table.setSortingEnabled(sorting)
 
-            present_count = sum(
-                1
-                for r in display_records
-                if r["status"] == "PRESENT"
-            )
-
-            absent_count = sum(
-                1
-                for r in display_records
-                if r["status"] == "ABSENT"
-            )
-
-            total_count = (
-                present_count + absent_count
-            )
-
-            self.total_value.setText(
-                str(total_count)
-            )
-
-            self.present_value.setText(
-                str(present_count)
-            )
-
-            self.absent_value.setText(
-                str(absent_count)
-            )
+            # 5. Update UI Stat Cards
+            total_enrolled = len(enrolled_students)
+            self.total_value.setText(str(total_enrolled))
+            self.present_value.setText(str(present_count))
+            self.absent_value.setText(str(absent_count))
 
         except Exception as error:
-
             if (
                 not hasattr(self, "_last_error")
                 or self._last_error != str(error)
             ):
-
                 self._last_error = str(error)
-
                 QMessageBox.critical(
                     self,
                     "Attendance Display Error",
                     f"Could not load attendance data:\n\n{error}",
                 )
 
-            print(
-                "ATTENDANCE DISPLAY ERROR:",
-                error
-            )
+            print("ATTENDANCE DISPLAY ERROR:", error)
 
     def closeEvent(self, event):
-
         if hasattr(self, "refresh_timer"):
             self.refresh_timer.stop()
 
@@ -493,11 +445,10 @@ class AttendanceDisplayTest(QWidget):
 
 
 if __name__ == "__main__":
-
     app = QApplication(sys.argv)
 
     window = AttendanceDisplayTest(
-        "Class 10 B"
+        "Class 10 A"
     )
 
     window.show()
