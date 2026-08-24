@@ -1,168 +1,570 @@
-import sys
-import os
-import json
-import datetime
-import subprocess
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QFrame, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox
-)
-from PyQt6.QtCore import Qt, QDateTime
-from PyQt6.QtGui import QFont
-from network_sync import fetch_network_data
+<!DOCTYPE html>
+<html lang="en">
+<head>
 
-DATA_FILE = "data.json"
-RECOGNITION_COOLDOWN_SECONDS = 15
+<meta charset="UTF-8">
 
-class NoticeHistoryWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.init_ui()
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-    def init_ui(self):
-        self.setWindowTitle("SOS School - Notice Archives & Cloud Audit Log")
-        self.resize(900, 550)
-        self.setStyleSheet("background-color: #eaf5fc;")
+<title>
+SOS School - Notice Archives & Cloud Audit Log
+</title>
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(25, 25, 25, 25)
-        main_layout.setSpacing(15)
+<style>
 
-        # Title Header with Back Button
-        header_layout = QHBoxLayout()
+*{
+    box-sizing:border-box
+}
 
-        btn_back = QPushButton("⬅ Back to Admin Panel")
-        btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_back.setFixedHeight(34)
-        btn_back.setStyleSheet("""
-            QPushButton {
-                background-color: #e1f0fa;
-                color: #0066b2;
-                border-radius: 6px;
-                font-weight: bold;
-                padding: 0 12px;
-                border: 1px solid #b2d4ee;
+html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    font-family:"Segoe UI",Arial,sans-serif;
+    background:#eaf5fc;
+    color:#1a2a3a
+}
+
+body{
+    overflow:hidden
+}
+
+.window{
+    width:100%;
+    height:100vh;
+    padding:25px;
+    display:flex;
+    flex-direction:column;
+    gap:15px
+}
+
+.header{
+    min-height:34px;
+    height:34px;
+    display:flex;
+    align-items:center
+}
+
+.back-button{
+    height:34px;
+    background:#e1f0fa;
+    color:#0066b2;
+    border-radius:6px;
+    font-weight:bold;
+    padding:0 12px;
+    border:1px solid #b2d4ee;
+    cursor:pointer
+}
+
+.back-button:hover{
+    background:#cbe3f5
+}
+
+.title{
+    margin-left:15px;
+    color:#004080;
+    font-size:16px;
+    font-weight:700
+}
+
+.spacer{
+    flex:1
+}
+
+.refresh{
+    height:34px;
+    background:#0077c8;
+    color:#fff;
+    border:0;
+    border-radius:6px;
+    padding:0 15px;
+    font-weight:700;
+    cursor:pointer
+}
+
+.card{
+    flex:1;
+    min-height:0;
+    background:rgba(255,255,255,.95);
+    border:1px solid #cbe3f5;
+    border-radius:12px;
+    padding:15px
+}
+
+.status{
+    display:none;
+    padding:8px 12px;
+    margin-bottom:10px;
+    border-radius:6px;
+    font-size:11px;
+    font-weight:700
+}
+
+.status.show{
+    display:block
+}
+
+.table-wrap{
+    width:100%;
+    height:100%;
+    overflow:auto;
+    background:#fff;
+    border:1px solid #b2d4ee;
+    border-radius:8px
+}
+
+table{
+    width:100%;
+    min-width:900px;
+    border-collapse:collapse;
+    background:#fff
+}
+
+thead{
+    background:#0077c8
+}
+
+th{
+    background:#0077c8;
+    color:#fff;
+    padding:9px;
+    text-align:center;
+    position:sticky;
+    top:0;
+    z-index:2
+}
+
+td{
+    background:#fff;
+    padding:9px;
+    border-top:1px solid #e1f0fa;
+    vertical-align:top
+}
+
+tbody tr:hover td{
+    background:#f5faff
+}
+
+.pdf-link{
+    color:#0077c8;
+    font-weight:700;
+    text-decoration:none
+}
+
+.pdf-link:hover{
+    text-decoration:underline
+}
+
+</style>
+
+</head>
+
+<body>
+
+<main class="window">
+
+<header class="header">
+
+<button
+    id="backButton"
+    class="back-button"
+>
+⬅ Back to Admin Panel
+</button>
+
+<div class="title">
+📚 Managed Notice Archive (Cloud Synced)
+</div>
+
+<div class="spacer"></div>
+
+<button
+    id="refreshButton"
+    class="refresh"
+>
+🔄 Refresh Archives
+</button>
+
+</header>
+
+
+<section class="card">
+
+<div
+    id="status"
+    class="status"
+></div>
+
+
+<div class="table-wrap">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>
+Target Group
+</th>
+
+<th>
+Notice Title
+</th>
+
+<th>
+Content Body
+</th>
+
+<th>
+PDF Attachment
+</th>
+
+<th>
+Timestamp
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody id="archiveBody"></tbody>
+
+</table>
+
+</div>
+
+</section>
+
+</main>
+
+
+<script>
+
+const DATA_ENDPOINT =
+    "/api/admin/data";
+
+
+const archiveBody =
+    document.getElementById(
+        "archiveBody"
+    );
+
+
+const status =
+    document.getElementById(
+        "status"
+    );
+
+
+const refreshButton =
+    document.getElementById(
+        "refreshButton"
+    );
+
+
+function escapeHTML(
+    value
+){
+
+    return String(
+        value ?? ""
+    )
+    .replace(
+        /[&<>"']/g,
+        character => ({
+            "&":"&amp;",
+            "<":"&lt;",
+            ">":"&gt;",
+            '"':"&quot;",
+            "'":"&#39;"
+        }[character])
+    );
+}
+
+
+function fileName(
+    url
+){
+
+    return String(
+        url || ""
+    )
+    .replace(
+        /\\/g,
+        "/"
+    )
+    .split("/")
+    .pop();
+}
+
+
+function formatDate(
+    value
+){
+
+    if(!value){
+        return "N/A";
+    }
+
+
+    const date =
+        new Date(value);
+
+
+    if(
+        Number.isNaN(
+            date.getTime()
+        )
+    ){
+
+        return value;
+    }
+
+
+    return (
+        date.toLocaleDateString(
+            undefined,
+            {
+                month:"short",
+                day:"2-digit",
+                year:"numeric"
             }
-            QPushButton:hover {
-                background-color: #cbe3f5;
+        )
+        +
+        " - "
+        +
+        date.toLocaleTimeString(
+            undefined,
+            {
+                hour:"2-digit",
+                minute:"2-digit",
+                hour12:true
             }
-        """)
-        btn_back.clicked.connect(self.return_to_admin)
+        )
+    );
+}
 
-        title_lbl = QLabel("📚 Managed Notice Archive (Cloud Synced)")
-        title_lbl.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        title_lbl.setStyleSheet("color: #004080; background: transparent;")
 
-        self.refresh_btn = QPushButton("🔄 Refresh Archives")
-        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.refresh_btn.setFixedHeight(34)
-        self.refresh_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0077c8;
-                color: #ffffff;
-                border-radius: 6px;
-                font-weight: bold;
-                padding: 0 15px;
-                border: none;
+function showStatus(
+    message,
+    error=false
+){
+
+    status.textContent =
+        message;
+
+
+    status.classList.add(
+        "show"
+    );
+
+
+    status.style.background =
+        error
+            ? "#fff0f0"
+            : "#e1f0fa";
+
+
+    status.style.border =
+        "1px solid "+
+        (
+            error
+                ? "#e2a5a5"
+                : "#b2d4ee"
+        );
+
+
+    status.style.color =
+        error
+            ? "#9b2c2c"
+            : "#004080";
+}
+
+
+async function loadArchive(){
+
+    try{
+
+        refreshButton.disabled =
+            true;
+
+
+        const response =
+            await fetch(
+                DATA_ENDPOINT,
+                {
+                    cache:"no-store"
+                }
+            );
+
+
+        if(!response.ok){
+
+            throw new Error(
+                `Request failed: ${response.status}`
+            );
+        }
+
+
+        const result =
+            await response.json();
+
+
+        const data =
+            result.data || {};
+
+
+        /*
+         * IMPORTANT:
+         * This is full history.
+         * There is deliberately NO 12-hour filter.
+         */
+        const notices =
+            Array.isArray(
+                data.notices
+            )
+                ? data.notices
+                : [];
+
+
+        archiveBody.innerHTML =
+            "";
+
+
+        notices.forEach(
+            notice => {
+
+                const row =
+                    document.createElement(
+                        "tr"
+                    );
+
+
+                let pdfHTML =
+                    "None";
+
+
+                if(
+                    typeof notice.pdf ===
+                    "string"
+                    &&
+                    notice.pdf
+                ){
+
+                    const displayName =
+                        notice.pdf_name ||
+                        fileName(
+                            notice.pdf
+                        ) ||
+                        "Open PDF";
+
+
+                    pdfHTML =
+                        `
+                        <a
+                            class="pdf-link"
+                            href="${escapeHTML(notice.pdf)}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            ${escapeHTML(displayName)}
+                        </a>
+                        `;
+                }
+
+
+                row.innerHTML =
+                    `
+                    <td>
+                        ${escapeHTML(
+                            `${notice.target || "All"} (${notice.section || ""})`
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHTML(
+                            notice.title || ""
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHTML(
+                            notice.content ||
+                            "No body text"
+                        )}
+                    </td>
+
+                    <td>
+                        ${pdfHTML}
+                    </td>
+
+                    <td>
+                        ${escapeHTML(
+                            formatDate(
+                                notice.timestamp
+                            )
+                        )}
+                    </td>
+                    `;
+
+
+                archiveBody.appendChild(
+                    row
+                );
             }
-            QPushButton:hover {
-                background-color: #005fa3;
-            }
-        """)
-        self.refresh_btn.clicked.connect(self.load_archive_data)
+        );
 
-        header_layout.addWidget(btn_back)
-        header_layout.addSpacing(15)
-        header_layout.addWidget(title_lbl)
-        header_layout.addStretch()
-        header_layout.addWidget(self.refresh_btn)
-        main_layout.addLayout(header_layout)
 
-        # Card container for data view
-        card_frame = QFrame()
-        card_frame.setStyleSheet("""
-            QFrame {
-                background-color: rgba(255, 255, 255, 0.95);
-                border-radius: 12px;
-                border: 1px solid #cbe3f5;
-                padding: 15px;
-            }
-        """)
-        card_layout = QVBoxLayout(card_frame)
-        card_layout.setContentsMargins(10, 10, 10, 10)
+        showStatus(
+            `Loaded ${notices.length} notice record(s) from Supabase.`
+        );
 
-        # Data Table displaying well-managed historical notices payload fields
-        self.table_archive = QTableWidget(0, 5)
-        self.table_archive.setHorizontalHeaderLabels(
-            ["Target Group", "Notice Title", "Content Body", "PDF Attachment", "Timestamp"])
-        self.table_archive.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table_archive.setStyleSheet("""
-            QTableWidget {
-                background-color: #ffffff;
-                color: #1a2a3a;
-                border-radius: 8px;
-                border: 1px solid #b2d4ee;
-                gridline-color: #e1f0fa;
-            }
-            QHeaderView::section {
-                background-color: #0077c8;
-                color: #ffffff;
-                border: none;
-                padding: 8px;
-                font-weight: bold;
-            }
-        """)
-        card_layout.addWidget(self.table_archive)
-        main_layout.addWidget(card_frame)
 
-        self.load_archive_data()
+    }
+    catch(error){
 
-    def return_to_admin(self):
-        """Closes notice window and re-opens admin_panel.py."""
-        admin_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin_panel.py")
-        if os.path.exists(admin_path):
-            subprocess.Popen([sys.executable, admin_path], cwd=os.path.dirname(admin_path))
-            self.close()
-        else:
-            QMessageBox.warning(self, "File Missing", "Could not find admin_panel.py in the current directory.")
+        showStatus(
+            `Could not load notice history: ${error.message}`,
+            true
+        );
 
-    def load_archive_data(self):
-        """Fetches all notice records, including full archives, from network or local JSON fallback."""
-        try:
-            # Pass ignore_expiration=True if supported by fetch_network_data,
-            # or read directly from data.json without running is_recent()
-            data = fetch_network_data(DATA_FILE)
-            if not data and os.path.exists(DATA_FILE):
-                with open(DATA_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+    }
+    finally{
 
-            # Do NOT filter by is_recent() here — load every notice
-            notices = data.get("notices", []) if isinstance(data, dict) else []
+        refreshButton.disabled =
+            false;
+    }
+}
 
-            self.table_archive.setRowCount(len(notices))
-            for row, n in enumerate(notices):
-                target_str = f"{n.get('target', 'All')} ({n.get('section', '')})"
-                title = n.get("title", "")
-                content = n.get("content", "No body text")
-                pdf_val = os.path.basename(n.get("pdf")) if n.get("pdf") else "None"
 
-                ts_str = n.get("timestamp", "")
-                try:
-                    dt_obj = datetime.datetime.fromisoformat(ts_str)
-                    time_display = dt_obj.strftime("%b %d, %Y - %I:%M %p")
-                except Exception:
-                    time_display = ts_str or "N/A"
+refreshButton.onclick =
+    loadArchive;
 
-                self.table_archive.setItem(row, 0, QTableWidgetItem(target_str))
-                self.table_archive.setItem(row, 1, QTableWidgetItem(title))
-                self.table_archive.setItem(row, 2, QTableWidgetItem(content))
-                self.table_archive.setItem(row, 3, QTableWidgetItem(pdf_val))
-                self.table_archive.setItem(row, 4, QTableWidgetItem(time_display))
-        except Exception as e:
-            QMessageBox.warning(self, "Sync Error", f"Could not parse cloud payload data securely:\n{e}")
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = NoticeHistoryWindow()
-    window.show()
-    sys.exit(app.exec())
+document.getElementById(
+    "backButton"
+).onclick =
+    () => {
+
+        window.location.href =
+            "admin_panel.html";
+    };
+
+
+loadArchive();
+
+
+setInterval(
+    loadArchive,
+    5000
+);
+
+</script>
+
+</body>
+</html>
