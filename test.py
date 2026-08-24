@@ -18,6 +18,7 @@ from help import HelpWindow
 from enrollment import EnrollmentWindow
 from facial_attendance import FacialAttendanceWindow
 from cal import CalendarWindow
+from attendancedisplaytest import AttendanceDisplayTest
 try:
     from database import process_scan
 except ImportError:
@@ -140,11 +141,9 @@ class AttendanceHistoryDialog(QDialog):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(16)
 
-        # Summary Metrics Cards Row
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(14)
 
-        # Total Students Card
         card_total = QFrame()
         card_total.setStyleSheet("""
             QFrame {
@@ -164,7 +163,6 @@ class AttendanceHistoryDialog(QDialog):
         l1.addWidget(lbl_t_title)
         l1.addWidget(self.lbl_total_val)
 
-        # Present Card
         card_present = QFrame()
         card_present.setStyleSheet("""
             QFrame {
@@ -184,7 +182,6 @@ class AttendanceHistoryDialog(QDialog):
         l2.addWidget(lbl_p_title)
         l2.addWidget(self.lbl_present_val)
 
-        # Absent Card
         card_absent = QFrame()
         card_absent.setStyleSheet("""
             QFrame {
@@ -209,7 +206,6 @@ class AttendanceHistoryDialog(QDialog):
         cards_layout.addWidget(card_absent, 1)
         layout.addLayout(cards_layout)
 
-        # Attendance Table
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Student ID", "Student Name", "Status", "Time Marked"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -433,6 +429,7 @@ class ClassroomDashboard(QWidget):
         self.previous_window = previous_window
         self.help_window = None
         self.attendance_window = None
+        self.attendance_display_window = None
         self.calendar_window = None
         self.selected_class_name = current_class_name
         self.current_notices = []
@@ -583,8 +580,23 @@ class ClassroomDashboard(QWidget):
         )
         self.attendance_window.show()
     def open_attendance_history(self):
-        dialog = AttendanceHistoryDialog(self.selected_class_name, self)
-        dialog.exec()
+        try:
+            self.hide()
+            self.attendance_display_window = AttendanceDisplayTest(
+                selected_class=self.selected_class_name,
+                parent=None
+            )
+            self.attendance_display_window.previous_window = self
+            self.attendance_display_window.show()
+            self.attendance_display_window.raise_()
+            self.attendance_display_window.activateWindow()
+        except Exception as e:
+            self.show()
+            QMessageBox.critical(
+                self,
+                "Attendance Display Error",
+                f"Could not open attendance display:\n\n{e}"
+            )
     def return_from_facial_attendance(self, source_class):
         if hasattr(self, "attendance_window") and self.attendance_window:
             self.attendance_window.close()
@@ -898,7 +910,6 @@ class ClassroomDashboard(QWidget):
             btn_enroll.setIcon(camera_icon)
         btn_enroll.clicked.connect(self.open_enrollment)
         sidebar_layout.addWidget(btn_enroll)
-        # Container layout for Attendance and Attendance History buttons
         attendance_btn_layout = QHBoxLayout()
         attendance_btn_layout.setSpacing(6)
         btn_attendance = QPushButton("Mark Attendance")
