@@ -6,6 +6,7 @@ import random
 import datetime
 import subprocess
 import base64
+import shutil
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -19,9 +20,6 @@ from PyQt6.QtGui import QFont, QPixmap, QPainter, QPainterPath, QColor, QBrush
 from network_sync import push_cloud_data, fetch_network_data
 from help import HelpWindow
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
 
 DATA_FILE = "data.json"
 CREDENTIALS_FILE = "admin_credentials.json"
@@ -29,31 +27,65 @@ LOGO_FILENAME = "logo.png"
 
 EXPIRATION_HOURS = 12
 
-# Local folder used to keep selected PDFs available locally.
 PDF_FOLDER = "pdfs"
 
-# ============================================================
-# HELPER FUNCTIONS
-# ============================================================
+_PROJECT_DIR = None
+_DATA_PATH = None
+_CREDENTIALS_PATH = None
+_PDF_FOLDER_PATH = None
+
 
 def get_project_dir():
-    return os.path.dirname(os.path.abspath(__file__))
+    global _PROJECT_DIR
+
+    if _PROJECT_DIR is None:
+        _PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    return _PROJECT_DIR
+
 
 def get_data_path():
-    return os.path.join(get_project_dir(), DATA_FILE)
+    global _DATA_PATH
+
+    if _DATA_PATH is None:
+        _DATA_PATH = os.path.join(
+            get_project_dir(),
+            DATA_FILE
+        )
+
+    return _DATA_PATH
+
 
 def get_credentials_path():
-    return os.path.join(get_project_dir(), CREDENTIALS_FILE)
+    global _CREDENTIALS_PATH
+
+    if _CREDENTIALS_PATH is None:
+        _CREDENTIALS_PATH = os.path.join(
+            get_project_dir(),
+            CREDENTIALS_FILE
+        )
+
+    return _CREDENTIALS_PATH
+
 
 def get_pdf_folder():
-    folder = os.path.join(get_project_dir(), PDF_FOLDER)
+    global _PDF_FOLDER_PATH
 
-    try:
-        os.makedirs(folder, exist_ok=True)
-    except Exception as error:
-        print(f"Could not create PDF folder: {error}")
+    if _PDF_FOLDER_PATH is None:
+        folder = os.path.join(
+            get_project_dir(),
+            PDF_FOLDER
+        )
 
-    return folder
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except Exception as error:
+            print(f"Could not create PDF folder: {error}")
+
+        _PDF_FOLDER_PATH = folder
+
+    return _PDF_FOLDER_PATH
+
 
 def parse_iso_timestamp(ts_str):
     if not ts_str:
@@ -63,6 +95,7 @@ def parse_iso_timestamp(ts_str):
         return datetime.datetime.fromisoformat(ts_str)
     except Exception:
         return None
+
 
 def is_recent(ts_str, max_hours=EXPIRATION_HOURS):
     dt = parse_iso_timestamp(ts_str)
@@ -74,9 +107,6 @@ def is_recent(ts_str, max_hours=EXPIRATION_HOURS):
 
     return (now - dt).total_seconds() < (max_hours * 3600)
 
-# ============================================================
-# CREDENTIALS
-# ============================================================
 
 def load_credentials():
     credentials_path = get_credentials_path()
@@ -94,6 +124,7 @@ def load_credentials():
         "password": "ADMIN404"
     }
 
+
 def save_credentials(admin_id, password):
     credentials_path = get_credentials_path()
 
@@ -107,18 +138,8 @@ def save_credentials(admin_id, password):
             indent=4
         )
 
-# ============================================================
-# PDF HANDLING
-# ============================================================
 
 def copy_pdf_to_local_folder(source_path):
-    """
-    Copies the selected PDF into the project's local pdfs folder.
-
-    This prevents the application from depending on a temporary
-    file location selected through QFileDialog.
-    """
-
     if not source_path:
         return None
 
@@ -127,8 +148,6 @@ def copy_pdf_to_local_folder(source_path):
         return None
 
     try:
-        import shutil
-
         pdf_folder = get_pdf_folder()
 
         original_name = os.path.basename(source_path)
@@ -140,7 +159,6 @@ def copy_pdf_to_local_folder(source_path):
             original_name
         )
 
-        # Prevent accidental overwriting.
         counter = 1
 
         while os.path.exists(destination):
@@ -159,9 +177,6 @@ def copy_pdf_to_local_folder(source_path):
         print(f"Could not copy PDF locally: {error}")
         return os.path.abspath(source_path)
 
-# ============================================================
-# ANIMATED BACKGROUND
-# ============================================================
 
 class Bubble:
 
@@ -211,6 +226,24 @@ class Bubble:
             6.28
         )
 
+        self.main_brush = QBrush(
+            QColor(
+                255,
+                255,
+                255,
+                self.opacity
+            )
+        )
+
+        self.highlight_brush = QBrush(
+            QColor(
+                0,
+                150,
+                220,
+                int(self.opacity * 0.4)
+            )
+        )
+
     def update(
         self,
         width,
@@ -230,6 +263,7 @@ class Bubble:
                 height
             )
 
+
 class AnimatedBackgroundWidget(QWidget):
 
     def __init__(self, parent=None):
@@ -238,6 +272,9 @@ class AnimatedBackgroundWidget(QWidget):
         self.wave_phase = 0.0
 
         self.bubbles = []
+
+        self._wave_x_values = []
+        self._wave_width = -1
 
         self.timer = QTimer(self)
 
@@ -268,6 +305,8 @@ class AnimatedBackgroundWidget(QWidget):
 
         if not self.bubbles:
             self.init_bubbles()
+
+        self._wave_width = -1
 
         super().resizeEvent(event)
 
@@ -353,21 +392,14 @@ class AnimatedBackgroundWidget(QWidget):
             phase_shift=self.wave_phase * 1.3
         )
 
+        painter.setPen(
+            Qt.PenStyle.NoPen
+        )
+
         for bubble in self.bubbles:
 
-            painter.setPen(
-                Qt.PenStyle.NoPen
-            )
-
             painter.setBrush(
-                QBrush(
-                    QColor(
-                        255,
-                        255,
-                        255,
-                        bubble.opacity
-                    )
-                )
+                bubble.main_brush
             )
 
             painter.drawEllipse(
@@ -380,16 +412,7 @@ class AnimatedBackgroundWidget(QWidget):
             )
 
             painter.setBrush(
-                QBrush(
-                    QColor(
-                        0,
-                        150,
-                        220,
-                        int(
-                            bubble.opacity * 0.4
-                        )
-                    )
-                )
+                bubble.highlight_brush
             )
 
             painter.drawEllipse(
@@ -413,6 +436,15 @@ class AnimatedBackgroundWidget(QWidget):
         phase_shift
     ):
 
+        if self._wave_width != width:
+            self._wave_x_values = range(
+                0,
+                width + 10,
+                10
+            )
+
+            self._wave_width = width
+
         path = QPainterPath()
 
         path.moveTo(
@@ -425,9 +457,7 @@ class AnimatedBackgroundWidget(QWidget):
             offset_y
         )
 
-        x = 0
-
-        while x <= width:
+        for x in self._wave_x_values:
 
             y = (
                 offset_y
@@ -441,8 +471,6 @@ class AnimatedBackgroundWidget(QWidget):
                 x,
                 y
             )
-
-            x += 10
 
         path.lineTo(
             width,
@@ -461,9 +489,6 @@ class AnimatedBackgroundWidget(QWidget):
 
         painter.drawPath(path)
 
-# ============================================================
-# ADMIN PANEL
-# ============================================================
 
 class AdminPanel(QWidget):
 
@@ -476,10 +501,6 @@ class AdminPanel(QWidget):
         self.help_window = None
 
         self.init_ui()
-
-    # ========================================================
-    # DATA
-    # ========================================================
 
     def read_data(self):
 
@@ -523,14 +544,6 @@ class AdminPanel(QWidget):
 
     def save_data(self, data):
 
-        """
-        Always save locally first.
-
-        Cloud synchronization is treated as optional.
-        Therefore a missing Supabase storage bucket or another
-        cloud error cannot destroy local functionality.
-        """
-
         data_path = get_data_path()
 
         try:
@@ -559,10 +572,6 @@ class AdminPanel(QWidget):
             )
 
             return False
-
-        # ----------------------------------------------------
-        # Cloud synchronization
-        # ----------------------------------------------------
 
         try:
 
@@ -600,10 +609,6 @@ class AdminPanel(QWidget):
             )
 
         return True
-
-    # ========================================================
-    # UI
-    # ========================================================
 
     def init_ui(self):
 
@@ -646,10 +651,6 @@ class AdminPanel(QWidget):
 
         main_layout.setSpacing(0)
 
-        # ====================================================
-        # SIDEBAR
-        # ====================================================
-
         sidebar = QFrame()
 
         sidebar.setFixedWidth(
@@ -677,10 +678,6 @@ class AdminPanel(QWidget):
         )
 
         sidebar_layout.setSpacing(0)
-
-        # ----------------------------------------------------
-        # Logo
-        # ----------------------------------------------------
 
         logo_lbl = QLabel()
 
@@ -730,10 +727,6 @@ class AdminPanel(QWidget):
             sidebar_layout.addSpacing(
                 10
             )
-
-        # ----------------------------------------------------
-        # School Name
-        # ----------------------------------------------------
 
         school_box = QFrame()
 
@@ -794,10 +787,6 @@ class AdminPanel(QWidget):
         sidebar_layout.addSpacing(
             12
         )
-
-        # ----------------------------------------------------
-        # Status
-        # ----------------------------------------------------
 
         mid_card = QFrame()
 
@@ -863,10 +852,6 @@ class AdminPanel(QWidget):
             15
         )
 
-        # ----------------------------------------------------
-        # Navigation
-        # ----------------------------------------------------
-
         btn_notices = QPushButton(
             " Notices & PDFs"
         )
@@ -927,10 +912,6 @@ class AdminPanel(QWidget):
             sidebar
         )
 
-        # ====================================================
-        # CONTENT
-        # ====================================================
-
         content_area = QWidget()
 
         content_layout = QVBoxLayout(
@@ -947,10 +928,6 @@ class AdminPanel(QWidget):
         content_layout.setSpacing(
             0
         )
-
-        # ----------------------------------------------------
-        # Header
-        # ----------------------------------------------------
 
         header_bar = QFrame()
 
@@ -1028,10 +1005,6 @@ class AdminPanel(QWidget):
             header_bar
         )
 
-        # ----------------------------------------------------
-        # Pages
-        # ----------------------------------------------------
-
         self.stacked_widget = QStackedWidget()
 
         self.stacked_widget.setStyleSheet(
@@ -1078,10 +1051,6 @@ class AdminPanel(QWidget):
             content_area
         )
 
-        # ====================================================
-        # CLOCK
-        # ====================================================
-
         self.timer = QTimer(
             self
         )
@@ -1100,10 +1069,6 @@ class AdminPanel(QWidget):
             0
         )
 
-    # ========================================================
-    # CLOCK
-    # ========================================================
-
     def update_live_time(self):
 
         current_str = (
@@ -1117,10 +1082,6 @@ class AdminPanel(QWidget):
         self.time_label.setText(
             current_str
         )
-
-    # ========================================================
-    # PAGE SWITCHING
-    # ========================================================
 
     def switch_page(self, index):
 
@@ -1168,10 +1129,6 @@ class AdminPanel(QWidget):
                 if i == index
                 else inactive_style
             )
-
-    # ========================================================
-    # NOTICE PAGE
-    # ========================================================
 
     def setup_notice_page(self):
 
@@ -1233,10 +1190,6 @@ class AdminPanel(QWidget):
         form_layout.setSpacing(
             8
         )
-
-        # ----------------------------------------------------
-        # Target
-        # ----------------------------------------------------
 
         target_layout = QHBoxLayout()
 
@@ -1351,10 +1304,6 @@ class AdminPanel(QWidget):
             target_layout
         )
 
-        # ----------------------------------------------------
-        # Notice inputs
-        # ----------------------------------------------------
-
         input_style = """
             QLineEdit, QTextEdit {
                 background-color: #ffffff;
@@ -1402,10 +1351,6 @@ class AdminPanel(QWidget):
         form_layout.addWidget(
             self.input_notice_body
         )
-
-        # ----------------------------------------------------
-        # PDF
-        # ----------------------------------------------------
 
         pdf_layout = QHBoxLayout()
 
@@ -1465,10 +1410,6 @@ class AdminPanel(QWidget):
         form_layout.addLayout(
             pdf_layout
         )
-
-        # ----------------------------------------------------
-        # Actions
-        # ----------------------------------------------------
 
         action_layout = QHBoxLayout()
 
@@ -1560,10 +1501,6 @@ class AdminPanel(QWidget):
             form_card
         )
 
-        # ----------------------------------------------------
-        # Active notices
-        # ----------------------------------------------------
-
         list_lbl = QLabel(
             "Active Notices (Auto-expires after 12h)"
         )
@@ -1631,10 +1568,6 @@ class AdminPanel(QWidget):
         )
 
         self.load_notices()
-
-    # ========================================================
-    # TARGET / SECTION
-    # ========================================================
 
     def handle_target_change(
         self,
@@ -1753,10 +1686,6 @@ class AdminPanel(QWidget):
             sections
         )
 
-    # ========================================================
-    # PDF UPLOAD
-    # ========================================================
-
     def upload_pdf(self):
 
         file_name, _ = QFileDialog.getOpenFileName(
@@ -1785,7 +1714,6 @@ class AdminPanel(QWidget):
 
             return
 
-        # Copy PDF into the project folder.
         local_pdf = copy_pdf_to_local_folder(
             abs_path
         )
@@ -1803,10 +1731,6 @@ class AdminPanel(QWidget):
         self.file_label.setText(
             f"PDF: {short_name}"
         )
-
-    # ========================================================
-    # POST NOTICE
-    # ========================================================
 
     def post_notice(self):
 
@@ -1854,19 +1778,34 @@ class AdminPanel(QWidget):
 
         pdf_name = None
         pdf_data = None
-        if self.selected_pdf_path and os.path.isfile(self.selected_pdf_path):
+
+        if self.selected_pdf_path and os.path.isfile(
+            self.selected_pdf_path
+        ):
+
             try:
-                pdf_name = os.path.basename(self.selected_pdf_path)
-                with open(self.selected_pdf_path, "rb") as pdf_file:
+
+                pdf_name = os.path.basename(
+                    self.selected_pdf_path
+                )
+
+                with open(
+                    self.selected_pdf_path,
+                    "rb"
+                ) as pdf_file:
+
                     pdf_data = base64.b64encode(
                         pdf_file.read()
                     ).decode("ascii")
+
             except Exception as error:
+
                 QMessageBox.critical(
                     self,
                     "PDF Error",
                     f"Could not read the selected PDF.\n\n{error}"
                 )
+
                 return
 
         notice_obj = {
@@ -1922,10 +1861,6 @@ class AdminPanel(QWidget):
 
         self.load_notices()
 
-    # ========================================================
-    # NOTICE HISTORY
-    # ========================================================
-
     def open_notice_history(self):
 
         history_path = os.path.join(
@@ -1955,30 +1890,22 @@ class AdminPanel(QWidget):
                 "Could not find notice.py in the current directory."
             )
 
-    # ========================================================
-    # LOAD NOTICES
-    # ========================================================
-
     def load_notices(self):
 
         data = self.read_data()
 
-        notices = [
-            n
-            for n in data.get(
-                "notices",
-                []
-            )
-            if is_recent(
-                n.get("timestamp")
-            )
-        ]
-
-        # Only update local JSON if expired records were removed.
         original_notices = data.get(
             "notices",
             []
         )
+
+        notices = [
+            n
+            for n in original_notices
+            if is_recent(
+                n.get("timestamp")
+            )
+        ]
 
         if len(original_notices) != len(
             notices
@@ -1986,7 +1913,6 @@ class AdminPanel(QWidget):
 
             data["notices"] = notices
 
-            # Save locally without repeatedly hammering cloud sync.
             try:
 
                 with open(
@@ -2022,6 +1948,7 @@ class AdminPanel(QWidget):
             )
 
             pdf_value = n.get("pdf_local") or n.get("pdf")
+
             pdf_str = (
                 os.path.basename(pdf_value)
                 if pdf_value
@@ -2102,10 +2029,6 @@ class AdminPanel(QWidget):
                 btn_del
             )
 
-    # ========================================================
-    # DELETE NOTICE
-    # ========================================================
-
     def delete_notice(
         self,
         row_idx
@@ -2129,10 +2052,6 @@ class AdminPanel(QWidget):
             )
 
             self.load_notices()
-
-    # ========================================================
-    # SUBSTITUTIONS PAGE
-    # ========================================================
 
     def setup_sub_page(self):
 
@@ -2299,10 +2218,6 @@ class AdminPanel(QWidget):
             form_card
         )
 
-        # ----------------------------------------------------
-        # Table
-        # ----------------------------------------------------
-
         self.table_subs = QTableWidget(
             0,
             7
@@ -2350,10 +2265,6 @@ class AdminPanel(QWidget):
 
         self.load_substitutions()
 
-    # ========================================================
-    # PERIOD PLACEHOLDER
-    # ========================================================
-
     def update_period_placeholder(
         self,
         text
@@ -2375,10 +2286,6 @@ class AdminPanel(QWidget):
             self.sub_period.setPlaceholderText(
                 "Period (1-8)"
             )
-
-    # ========================================================
-    # ADD SUBSTITUTION
-    # ========================================================
 
     def add_substitution(self):
 
@@ -2441,30 +2348,23 @@ class AdminPanel(QWidget):
 
         self.load_substitutions()
 
-    # ========================================================
-    # LOAD SUBSTITUTIONS
-    # ========================================================
-
     def load_substitutions(self):
 
         data = self.read_data()
-
-        subs = [
-            s
-            for s in data.get(
-                "substitutions",
-                []
-            )
-            if is_recent(
-                s.get("timestamp"),
-                max_hours=12
-            )
-        ]
 
         original_subs = data.get(
             "substitutions",
             []
         )
+
+        subs = [
+            s
+            for s in original_subs
+            if is_recent(
+                s.get("timestamp"),
+                max_hours=12
+            )
+        ]
 
         if len(original_subs) != len(
             subs
@@ -2612,10 +2512,6 @@ class AdminPanel(QWidget):
                 btn_del
             )
 
-    # ========================================================
-    # DELETE SUBSTITUTION
-    # ========================================================
-
     def delete_substitution(
         self,
         row_idx
@@ -2639,10 +2535,6 @@ class AdminPanel(QWidget):
             )
 
             self.load_substitutions()
-
-    # ========================================================
-    # ATTENDANCE PAGE
-    # ========================================================
 
     def setup_att_page(self):
 
@@ -2734,10 +2626,6 @@ class AdminPanel(QWidget):
             }
         """
 
-        # ----------------------------------------------------
-        # Class
-        # ----------------------------------------------------
-
         c_layout = QHBoxLayout()
 
         c_layout.setAlignment(
@@ -2796,10 +2684,6 @@ class AdminPanel(QWidget):
             c_layout
         )
 
-        # ----------------------------------------------------
-        # Section
-        # ----------------------------------------------------
-
         s_layout = QHBoxLayout()
 
         s_layout.setAlignment(
@@ -2847,10 +2731,6 @@ class AdminPanel(QWidget):
         card_layout.addSpacing(
             10
         )
-
-        # ----------------------------------------------------
-        # Attendance button
-        # ----------------------------------------------------
 
         btn_enter = QPushButton(
             " Enter Attendance Display"
@@ -2900,10 +2780,6 @@ class AdminPanel(QWidget):
             self.combo_att_class.currentText()
         )
 
-    # ========================================================
-    # ATTENDANCE SECTIONS
-    # ========================================================
-
     def update_att_sections(
         self,
         class_text
@@ -2933,10 +2809,6 @@ class AdminPanel(QWidget):
                     "Section B"
                 ]
             )
-
-    # ========================================================
-    # LAUNCH ATTENDANCE
-    # ========================================================
 
     def launch_attendance_display(self):
 
@@ -3114,10 +2986,6 @@ class AdminPanel(QWidget):
                 )
             )
 
-    # ========================================================
-    # SETTINGS PAGE
-    # ========================================================
-
     def setup_settings_page(self):
 
         layout = QVBoxLayout(
@@ -3186,10 +3054,6 @@ class AdminPanel(QWidget):
                 border: 2px solid #0077c8;
             }
         """
-
-        # ====================================================
-        # CREDENTIALS CARD
-        # ====================================================
 
         creds_card = QFrame()
 
@@ -3351,10 +3215,6 @@ class AdminPanel(QWidget):
             1
         )
 
-        # ====================================================
-        # ACTIONS CARD
-        # ====================================================
-
         actions_card = QFrame()
 
         actions_card.setStyleSheet(
@@ -3423,10 +3283,6 @@ class AdminPanel(QWidget):
             a_sub
         )
 
-        # ----------------------------------------------------
-        # HELP
-        # ----------------------------------------------------
-
         btn_help = QPushButton(
             " Launch User Manual / Help Guide"
         )
@@ -3464,10 +3320,6 @@ class AdminPanel(QWidget):
             btn_help
         )
 
-        # ----------------------------------------------------
-        # EXIT
-        # ----------------------------------------------------
-
         btn_exit = QPushButton(
             " Logout & Return to Portal"
         )
@@ -3504,10 +3356,6 @@ class AdminPanel(QWidget):
         actions_layout.addWidget(
             btn_exit
         )
-
-        # ----------------------------------------------------
-        # SYSTEM STATUS
-        # ----------------------------------------------------
 
         info_box = QFrame()
 
@@ -3573,10 +3421,6 @@ class AdminPanel(QWidget):
 
         layout.addStretch()
 
-    # ========================================================
-    # UPDATE CREDENTIALS
-    # ========================================================
-
     def update_credentials(self):
 
         new_id = (
@@ -3631,10 +3475,6 @@ class AdminPanel(QWidget):
             )
         )
 
-    # ========================================================
-    # HELP
-    # ========================================================
-
     def open_help_page(self):
 
         if (
@@ -3656,10 +3496,6 @@ class AdminPanel(QWidget):
         self.help_window.raise_()
 
         self.help_window.activateWindow()
-
-    # ========================================================
-    # EXIT TO ADMIN PAGE
-    # ========================================================
 
     def exit_to_adminpage(self):
 
@@ -3691,9 +3527,6 @@ class AdminPanel(QWidget):
                 "Could not find adminpage.py."
             )
 
-# ============================================================
-# MAIN
-# ============================================================
 
 if __name__ == "__main__":
 
