@@ -706,10 +706,22 @@
          * =========================================================
          * API CONFIGURATION
          * =========================================================
+         *
+         * IMPORTANT:
+         * API_BASE and API_BASE_URL are declared ONLY ONCE.
+         *
+         * This fixes:
+         *
+         *   Cannot redeclare block-scoped variable 'API_BASE'
+         *
+         * and:
+         *
+         *   API_BASE_URL is not defined
+         *
          */
 
-        const API_BASE_URL = window.location.origin;
-        const API_BASE = ""; // Left empty to route direct requests to Supabase REST
+        const API_BASE =
+            window.location.origin;
 
         const DEFAULT_CLASS =
             "Class 6";
