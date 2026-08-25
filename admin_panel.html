@@ -226,10 +226,7 @@ td a.pdf-link{color:#0066b2;font-weight:700;text-decoration:underline}
   Therefore test.py and the other Python files can keep using the same
   Python backend and Supabase data.
 */
-const API_BASE =
-  window.ADMIN_API_BASE ||
-  localStorage.getItem("ADMIN_API_BASE") ||
-  "http://127.0.0.1:8000";
+const API_BASE = window.location.origin;
 
 const EXPIRATION_HOURS = 12;
 const TARGETS = [
