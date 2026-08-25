@@ -25,6 +25,10 @@
             overflow: hidden;
         }
 
+        /* =====================================================
+           MAIN WINDOW
+           ===================================================== */
+
         .main-window {
             width: 100%;
             height: 100vh;
@@ -33,6 +37,10 @@
             flex-direction: column;
             gap: 15px;
         }
+
+        /* =====================================================
+           HEADER CARD
+           ===================================================== */
 
         .header-card {
             width: 100%;
@@ -46,6 +54,10 @@
             gap: 0;
             flex-shrink: 0;
         }
+
+        /* =====================================================
+           LOGO
+           ===================================================== */
 
         .logo-container {
             width: 50px;
@@ -63,6 +75,10 @@
             height: 50px;
             object-fit: contain;
         }
+
+        /* =====================================================
+           TITLE
+           ===================================================== */
 
         .title-box {
             display: flex;
@@ -96,6 +112,10 @@
             flex: 1;
             min-width: 15px;
         }
+
+        /* =====================================================
+           DATE CONTROL
+           ===================================================== */
 
         .date-box {
             display: flex;
@@ -170,6 +190,10 @@
             min-width: 15px;
         }
 
+        /* =====================================================
+           BACK BUTTON
+           ===================================================== */
+
         .back-button {
             width: 160px;
             min-width: 160px;
@@ -191,6 +215,10 @@
             background-color: #0077c8;
             color: #ffffff;
         }
+
+        /* =====================================================
+           STATISTICS
+           ===================================================== */
 
         .stats-layout {
             width: 100%;
@@ -258,6 +286,10 @@
         .absent-value {
             color: #e74c3c;
         }
+
+        /* =====================================================
+           ATTENDANCE TABLE
+           ===================================================== */
 
         .table-container {
             flex: 1;
@@ -345,6 +377,10 @@
             background-color: #f5faff;
         }
 
+        /* =====================================================
+           STATUS DISPLAY
+           ===================================================== */
+
         .status-present {
             color: #27ae60 !important;
             font-weight: 700;
@@ -354,6 +390,10 @@
             color: #e74c3c !important;
             font-weight: 700;
         }
+
+        /* =====================================================
+           SCROLLBAR
+           ===================================================== */
 
         .table-container::-webkit-scrollbar {
             width: 10px;
@@ -372,6 +412,10 @@
         .table-container::-webkit-scrollbar-thumb:hover {
             background: #8fbddd;
         }
+
+        /* =====================================================
+           DIALOG
+           ===================================================== */
 
         .dialog-overlay {
             position: fixed;
@@ -433,6 +477,10 @@
         .dialog-button:hover {
             background-color: #005a9e;
         }
+
+        /* =====================================================
+           RESPONSIVE FALLBACK
+           ===================================================== */
 
         @media (max-width: 950px) {
 
@@ -510,6 +558,10 @@
 
     <main class="main-window">
 
+        <!-- =================================================
+             TOP HEADER BAR
+             ================================================= -->
+
         <section class="header-card">
 
             <div class="logo-container">
@@ -551,11 +603,13 @@
                 </label>
 
                 <div class="date-picker-wrapper">
+
                     <input
                         id="datePicker"
                         class="date-picker"
                         type="date"
                     >
+
                 </div>
 
                 <button
@@ -580,6 +634,10 @@
 
         </section>
 
+
+        <!-- =================================================
+             STATISTICS
+             ================================================= -->
 
         <section class="stats-layout">
 
@@ -633,6 +691,10 @@
         </section>
 
 
+        <!-- =================================================
+             ATTENDANCE TABLE
+             ================================================= -->
+
         <section class="table-container">
 
             <table
@@ -641,15 +703,32 @@
             >
 
                 <thead>
+
                     <tr>
-                        <th>Student ID</th>
-                        <th>Student Name</th>
-                        <th>Status</th>
-                        <th>Time Marked</th>
+
+                        <th>
+                            Student ID
+                        </th>
+
+                        <th>
+                            Student Name
+                        </th>
+
+                        <th>
+                            Status
+                        </th>
+
+                        <th>
+                            Time Marked
+                        </th>
+
                     </tr>
+
                 </thead>
 
-                <tbody id="attendanceTableBody">
+                <tbody
+                    id="attendanceTableBody"
+                >
                 </tbody>
 
             </table>
@@ -658,6 +737,10 @@
 
     </main>
 
+
+    <!-- =====================================================
+         DIALOG
+         ===================================================== -->
 
     <div
         id="dialogOverlay"
@@ -700,382 +783,953 @@
     </div>
 
 
-   <script>
+<script>
 
-        /*
-         * =========================================================
-         * API CONFIGURATION
-         * =========================================================
-         */
+/* =========================================================
+   API CONFIGURATION
+   ========================================================= */
 
-        const API_BASE = window.location.origin;
-        const DEFAULT_CLASS = "Class 6";
-        const DEFAULT_SECTION = "Section A";
-        const LOGO_FILENAME = "logo.png";
-        const NEPAL_TIMEZONE = "Asia/Kathmandu";
+const API_BASE =
+    window.location.origin;
 
 
-        /* =========================================================
-           CLASS / SECTION HELPERS
-           ========================================================= */
+/* =========================================================
+   DEFAULT VALUES
+   ========================================================= */
 
-        function extractClassNumber(classText) {
-            classText = String(classText).trim();
-            if (classText.toLowerCase().startsWith("class ")) {
-                return classText.substring(6).trim();
+const DEFAULT_CLASS =
+    "Class 6";
+
+const DEFAULT_SECTION =
+    "Section A";
+
+const LOGO_FILENAME =
+    "logo.png";
+
+const NEPAL_TIMEZONE =
+    "Asia/Kathmandu";
+
+
+/* =========================================================
+   CLASS / SECTION HELPERS
+   ========================================================= */
+
+function extractClassNumber(
+    classText
+) {
+
+    classText =
+        String(
+            classText
+        ).trim();
+
+    if (
+        classText
+            .toLowerCase()
+            .startsWith("class ")
+    ) {
+
+        return classText
+            .substring(6)
+            .trim();
+    }
+
+    return classText;
+}
+
+
+function extractSection(
+    sectionText
+) {
+
+    sectionText =
+        String(
+            sectionText
+        ).trim();
+
+    if (
+        sectionText
+            .toLowerCase()
+            .startsWith("section ")
+    ) {
+
+        return sectionText
+            .substring(8)
+            .trim()
+            .toUpperCase();
+    }
+
+    return sectionText.toUpperCase();
+}
+
+
+/* =========================================================
+   URL CONFIGURATION
+   ========================================================= */
+
+function getConfiguration() {
+
+    const params =
+        new URLSearchParams(
+            window.location.search
+        );
+
+    const selectedClass =
+        params.get("class") ||
+        params.get("cls") ||
+        DEFAULT_CLASS;
+
+    const selectedSection =
+        params.get("section") ||
+        params.get("sec") ||
+        DEFAULT_SECTION;
+
+    return {
+        selectedClass,
+        selectedSection
+    };
+}
+
+
+const configuration =
+    getConfiguration();
+
+const selectedClass =
+    configuration.selectedClass;
+
+const selectedSection =
+    configuration.selectedSection;
+
+const classNumber =
+    extractClassNumber(
+        selectedClass
+    );
+
+const section =
+    extractSection(
+        selectedSection
+    );
+
+
+/* =========================================================
+   DOM REFERENCES
+   ========================================================= */
+
+const titleLabel =
+    document.getElementById(
+        "titleLabel"
+    );
+
+const dateLabel =
+    document.getElementById(
+        "dateLabel"
+    );
+
+const datePicker =
+    document.getElementById(
+        "datePicker"
+    );
+
+const fetchButton =
+    document.getElementById(
+        "fetchButton"
+    );
+
+const backButton =
+    document.getElementById(
+        "backButton"
+    );
+
+const totalValue =
+    document.getElementById(
+        "totalValue"
+    );
+
+const presentValue =
+    document.getElementById(
+        "presentValue"
+    );
+
+const absentValue =
+    document.getElementById(
+        "absentValue"
+    );
+
+const attendanceTableBody =
+    document.getElementById(
+        "attendanceTableBody"
+    );
+
+
+/* =========================================================
+   INITIAL UI
+   ========================================================= */
+
+titleLabel.textContent =
+    `Attendance Register: ` +
+    `${selectedClass} - ` +
+    `${selectedSection}`;
+
+
+/* =========================================================
+   LOGO FALLBACK
+   ========================================================= */
+
+function tryFallbackLogo(
+    image
+) {
+
+    const fallback =
+        "486624203_601802256148254_3403736131493055483_n.png";
+
+    if (
+        image.dataset.fallbackUsed !==
+        "true"
+    ) {
+
+        image.dataset.fallbackUsed =
+            "true";
+
+        image.src =
+            fallback;
+
+    }
+    else {
+
+        image.style.display =
+            "none";
+    }
+}
+
+
+/* =========================================================
+   NEPAL CLOCK
+   ========================================================= */
+
+function getNepalDateTimeParts() {
+
+    const formatter =
+        new Intl.DateTimeFormat(
+            "en-US",
+            {
+                timeZone:
+                    NEPAL_TIMEZONE,
+
+                weekday:
+                    "long",
+
+                month:
+                    "long",
+
+                day:
+                    "numeric",
+
+                year:
+                    "numeric",
+
+                hour:
+                    "numeric",
+
+                minute:
+                    "2-digit",
+
+                second:
+                    "2-digit",
+
+                hour12:
+                    true
             }
-            return classText;
+        );
+
+    const parts =
+        formatter.formatToParts(
+            new Date()
+        );
+
+    const result = {};
+
+    parts.forEach(
+        function(part) {
+
+            result[
+                part.type
+            ] =
+                part.value;
+
         }
+    );
+
+    return result;
+}
 
 
-        function extractSection(sectionText) {
-            sectionText = String(sectionText).trim();
-            if (sectionText.toLowerCase().startsWith("section ")) {
-                return sectionText.substring(8).trim().toUpperCase();
+function updateTimeDisplay() {
+
+    const now =
+        getNepalDateTimeParts();
+
+    const nowString =
+        `${now.weekday}, ` +
+        `${now.month} ` +
+        `${now.day}, ` +
+        `${now.year} - ` +
+        `${now.hour}:` +
+        `${now.minute}:` +
+        `${now.second} ` +
+        `${now.dayPeriod}`;
+
+    dateLabel.textContent =
+        `Date & Time: ${nowString}`;
+}
+
+
+/* =========================================================
+   DATE
+   ========================================================= */
+
+function getNepalISODate() {
+
+    const parts =
+        new Intl.DateTimeFormat(
+            "en-CA",
+            {
+                timeZone:
+                    NEPAL_TIMEZONE,
+
+                year:
+                    "numeric",
+
+                month:
+                    "2-digit",
+
+                day:
+                    "2-digit"
             }
-            return sectionText.toUpperCase();
-        }
+        )
+        .formatToParts(
+            new Date()
+        );
 
+    let year = "";
+    let month = "";
+    let day = "";
 
-        /* =========================================================
-           URL CONFIGURATION
-           ========================================================= */
+    parts.forEach(
+        function(part) {
 
-        function getConfiguration() {
-            const params = new URLSearchParams(window.location.search);
-            const selectedClass = params.get("class") || params.get("cls") || DEFAULT_CLASS;
-            const selectedSection = params.get("section") || params.get("sec") || DEFAULT_SECTION;
+            if (
+                part.type ===
+                "year"
+            ) {
 
-            return { selectedClass, selectedSection };
-        }
-
-
-        const configuration = getConfiguration();
-        const selectedClass = configuration.selectedClass;
-        const selectedSection = configuration.selectedSection;
-        const classNumber = extractClassNumber(selectedClass);
-        const section = extractSection(selectedSection);
-
-
-        /* =========================================================
-           DOM REFERENCES
-           ========================================================= */
-
-        const titleLabel = document.getElementById("titleLabel");
-        const dateLabel = document.getElementById("dateLabel");
-        const datePicker = document.getElementById("datePicker");
-        const fetchButton = document.getElementById("fetchButton");
-        const backButton = document.getElementById("backButton");
-        const totalValue = document.getElementById("totalValue");
-        const presentValue = document.getElementById("presentValue");
-        const absentValue = document.getElementById("absentValue");
-        const attendanceTableBody = document.getElementById("attendanceTableBody");
-
-
-        /* =========================================================
-           INITIAL UI
-           ========================================================= */
-
-        titleLabel.textContent = `Attendance Register: ${selectedClass} - ${selectedSection}`;
-
-
-        /* =========================================================
-           LOGO FALLBACK
-           ========================================================= */
-
-        function tryFallbackLogo(image) {
-            const fallback = "486624203_601802256148254_3403736131493055483_n.png";
-            if (image.dataset.fallbackUsed !== "true") {
-                image.dataset.fallbackUsed = "true";
-                image.src = fallback;
-            } else {
-                image.style.display = "none";
-            }
-        }
-
-
-        /* =========================================================
-           NEPAL CLOCK
-           ========================================================= */
-
-        function getNepalDateTimeParts() {
-            const formatter = new Intl.DateTimeFormat("en-US", {
-                timeZone: NEPAL_TIMEZONE,
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-                second: "2-digit",
-                hour12: true
-            });
-
-            const parts = formatter.formatToParts(new Date());
-            const result = {};
-            parts.forEach(part => { result[part.type] = part.value; });
-            return result;
-        }
-
-
-        function updateTimeDisplay() {
-            const now = getNepalDateTimeParts();
-            const nowString = `${now.weekday}, ${now.month} ${now.day}, ${now.year} - ${now.hour}:${now.minute}:${now.second} ${now.dayPeriod}`;
-            dateLabel.textContent = `Date & Time: ${nowString}`;
-        }
-
-
-        /* =========================================================
-           SCHOOL HOLIDAY BRIDGE
-           ========================================================= */
-
-        const SCHOOL_CALENDAR_API = "";
-
-        async function isSchoolHoliday(selectedDate) {
-            if (typeof window.is_school_holiday === "function") {
-                return Boolean(await window.is_school_holiday(selectedDate));
+                year =
+                    part.value;
             }
 
-            if (SCHOOL_CALENDAR_API) {
-                const separator = SCHOOL_CALENDAR_API.includes("?") ? "&" : "?";
-                const response = await fetch(`${SCHOOL_CALENDAR_API}${separator}date=${encodeURIComponent(selectedDate)}`);
-                if (!response.ok) {
-                    throw new Error(`School calendar request failed: ${response.status}`);
+            if (
+                part.type ===
+                "month"
+            ) {
+
+                month =
+                    part.value;
+            }
+
+            if (
+                part.type ===
+                "day"
+            ) {
+
+                day =
+                    part.value;
+            }
+
+        }
+    );
+
+    return (
+        `${year}-${month}-${day}`
+    );
+}
+
+
+const todayNepal =
+    getNepalISODate();
+
+datePicker.value =
+    todayNepal;
+
+
+/* =========================================================
+   CLEAR TABLE
+   ========================================================= */
+
+function clearAttendanceTable() {
+
+    attendanceTableBody.innerHTML =
+        "";
+}
+
+
+/* =========================================================
+   CREATE TABLE CELL
+   ========================================================= */
+
+function createTableCell(
+    value,
+    className = ""
+) {
+
+    const cell =
+        document.createElement(
+            "td"
+        );
+
+    cell.textContent =
+        value === undefined ||
+        value === null
+            ? ""
+            : String(value);
+
+    if (
+        className
+    ) {
+
+        cell.className =
+            className;
+    }
+
+    return cell;
+}
+
+
+/* =========================================================
+   RENDER ATTENDANCE
+   ========================================================= */
+
+function renderAttendanceData(
+    data
+) {
+
+    const students =
+        Array.isArray(
+            data.students
+        )
+            ? data.students
+            : [];
+
+    const totalStudents =
+        data.total_students !==
+            undefined
+            ? data.total_students
+            : students.length;
+
+    const presentStudents =
+        data.present_students !==
+            undefined
+            ? data.present_students
+            : students.filter(
+                student =>
+                    String(
+                        student.status ||
+                        ""
+                    )
+                    .trim()
+                    .toUpperCase() ===
+                    "PRESENT"
+            ).length;
+
+    const absentStudents =
+        data.absent_students !==
+            undefined
+            ? data.absent_students
+            : students.filter(
+                student =>
+                    String(
+                        student.status ||
+                        ""
+                    )
+                    .trim()
+                    .toUpperCase() ===
+                    "ABSENT"
+            ).length;
+
+
+    titleLabel.textContent =
+        `Attendance Register: ` +
+        `${selectedClass} - ` +
+        `${selectedSection}`;
+
+
+    if (
+        data.holiday
+    ) {
+
+        titleLabel.textContent +=
+            " (HOLIDAY)";
+
+        dateLabel.textContent =
+            `Date: ` +
+            `${data.date || datePicker.value}` +
+            ` - HOLIDAY`;
+
+    }
+    else {
+
+        dateLabel.textContent =
+            `Date: ` +
+            `${data.date || datePicker.value}`;
+    }
+
+
+    totalValue.textContent =
+        String(
+            totalStudents
+        );
+
+    presentValue.textContent =
+        String(
+            presentStudents
+        );
+
+    absentValue.textContent =
+        String(
+            absentStudents
+        );
+
+
+    clearAttendanceTable();
+
+
+    if (
+        students.length ===
+        0
+    ) {
+
+        const row =
+            document.createElement(
+                "tr"
+            );
+
+        const cell =
+            document.createElement(
+                "td"
+            );
+
+        cell.colSpan =
+            4;
+
+        cell.style.textAlign =
+            "center";
+
+        cell.style.color =
+            "#64748b";
+
+        cell.style.padding =
+            "20px";
+
+        cell.textContent =
+            "No attendance data found.";
+
+        row.appendChild(
+            cell
+        );
+
+        attendanceTableBody.appendChild(
+            row
+        );
+
+        return;
+    }
+
+
+    students.forEach(
+        function(student) {
+
+            const row =
+                document.createElement(
+                    "tr"
+                );
+
+
+            row.appendChild(
+                createTableCell(
+                    student.student_id
+                )
+            );
+
+
+            row.appendChild(
+                createTableCell(
+                    student.name
+                )
+            );
+
+
+            const status =
+                String(
+                    student.status ||
+                    "Not Marked"
+                ).trim();
+
+
+            const normalizedStatus =
+                status.toUpperCase();
+
+
+            const statusCell =
+                createTableCell(
+                    status
+                );
+
+
+            if (
+                normalizedStatus ===
+                "PRESENT"
+            ) {
+
+                statusCell.classList.add(
+                    "status-present"
+                );
+
+            }
+            else if (
+                normalizedStatus ===
+                "ABSENT"
+            ) {
+
+                statusCell.classList.add(
+                    "status-absent"
+                );
+            }
+
+
+            row.appendChild(
+                statusCell
+            );
+
+
+            row.appendChild(
+                createTableCell(
+                    student.time_marked ||
+                    "-"
+                )
+            );
+
+
+            attendanceTableBody.appendChild(
+                row
+            );
+
+        }
+    );
+}
+
+
+/* =========================================================
+   EXISTING FASTAPI ATTENDANCE ENDPOINT
+   ========================================================= */
+
+async function loadAttendanceForDate(
+    selectedDate
+) {
+
+    try {
+
+        clearAttendanceTable();
+
+
+        const url =
+            API_BASE +
+            "/api/attendance/display" +
+            "?class_number=" +
+            encodeURIComponent(
+                classNumber
+            ) +
+            "&section=" +
+            encodeURIComponent(
+                section
+            ) +
+            "&attendance_date=" +
+            encodeURIComponent(
+                selectedDate
+            );
+
+
+        const response =
+            await fetch(
+                url,
+                {
+                    method:
+                        "GET",
+
+                    cache:
+                        "no-store",
+
+                    headers:
+                        {
+                            "Accept":
+                                "application/json"
+                        }
                 }
-                const result = await response.json();
-                return Boolean(result.holiday);
+            );
+
+
+        const responseText =
+            await response.text();
+
+
+        let result;
+
+        try {
+
+            result =
+                responseText
+                    ? JSON.parse(
+                        responseText
+                    )
+                    : {};
+
+        }
+        catch {
+
+            throw new Error(
+                "The attendance API returned " +
+                "an invalid response:\n\n" +
+                responseText
+            );
+        }
+
+
+        if (
+            !response.ok
+        ) {
+
+            let detail =
+                result &&
+                result.detail
+                    ? result.detail
+                    : (
+                        result &&
+                        result.message
+                            ? result.message
+                            : JSON.stringify(
+                                result
+                            )
+                    );
+
+
+            if (
+                typeof detail !==
+                "string"
+            ) {
+
+                detail =
+                    JSON.stringify(
+                        detail
+                    );
             }
 
-            const date = new Date(`${selectedDate}T00:00:00`);
-            const day = date.getDay();
-            return (day === 0 || day === 6);
+
+            throw new Error(
+                `Attendance API failed ` +
+                `with HTTP ${response.status}.\n\n` +
+                detail
+            );
         }
 
 
-        /* =========================================================
-           STUDENT & ATTENDANCE QUERIES (FASTAPI API.PY INTEGRATION)
-           ========================================================= */
+        const data =
+            result &&
+            result.data !==
+                undefined
+                ? result.data
+                : result;
 
-        async function getStudents() {
-            const url = `${API_BASE}/api/students?class_number=${encodeURIComponent(classNumber)}&section=${encodeURIComponent(section)}`;
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                throw new Error(`Failed to fetch students (${response.status}): ${response.statusText}`);
-            }
 
-            const result = await response.json();
-            return result.data || result;
+        renderAttendanceData(
+            data
+        );
+
+    }
+    catch (
+        error
+    ) {
+
+        showDialog(
+            "Database Error",
+            "Could not load attendance data:\n\n" +
+            (
+                error &&
+                error.message
+                    ? error.message
+                    : String(error)
+            )
+        );
+
+        console.error(
+            "ATTENDANCE DISPLAY ERROR:",
+            error
+        );
+    }
+}
+
+
+/* =========================================================
+   FETCH BUTTON
+   ========================================================= */
+
+async function onDateChanged() {
+
+    const selectedDate =
+        datePicker.value;
+
+    if (
+        !selectedDate
+    ) {
+
+        return;
+    }
+
+
+    fetchButton.disabled =
+        true;
+
+    fetchButton.textContent =
+        "Loading...";
+
+
+    try {
+
+        await loadAttendanceForDate(
+            selectedDate
+        );
+
+    }
+    finally {
+
+        fetchButton.disabled =
+            false;
+
+        fetchButton.textContent =
+            "Fetch";
+    }
+}
+
+
+fetchButton.addEventListener(
+    "click",
+    onDateChanged
+);
+
+
+/* =========================================================
+   BACK TO ADMIN
+   ========================================================= */
+
+function returnToAdmin() {
+
+    window.location.href =
+        "admin_panel.html";
+}
+
+
+backButton.addEventListener(
+    "click",
+    returnToAdmin
+);
+
+
+/* =========================================================
+   DIALOG
+   ========================================================= */
+
+function showDialog(
+    title,
+    message
+) {
+
+    document.getElementById(
+        "dialogTitle"
+    ).textContent =
+        title;
+
+
+    document.getElementById(
+        "dialogContent"
+    ).textContent =
+        message;
+
+
+    document.getElementById(
+        "dialogOverlay"
+    )
+    .classList.add(
+        "visible"
+    );
+}
+
+
+function closeDialog() {
+
+    document.getElementById(
+        "dialogOverlay"
+    )
+    .classList.remove(
+        "visible"
+    );
+}
+
+
+document.getElementById(
+    "dialogButton"
+)
+.addEventListener(
+    "click",
+    closeDialog
+);
+
+
+document.getElementById(
+    "dialogOverlay"
+)
+.addEventListener(
+    "click",
+    function(event) {
+
+        if (
+            event.target ===
+            event.currentTarget
+        ) {
+
+            closeDialog();
         }
 
-
-        async function getAttendance(selectedDate) {
-            const url = `${API_BASE}/api/attendance/display?class_number=${encodeURIComponent(classNumber)}&section=${encodeURIComponent(section)}&attendance_date=${encodeURIComponent(selectedDate)}`;
-            const response = await fetch(url);
-
-            if (!response.ok) {
-                throw new Error(`Failed to fetch attendance (${response.status}): ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            return result.data || result;
-        }
+    }
+);
 
 
-        /* =========================================================
-           DATE PICKER INITIALIZATION
-           ========================================================= */
+/* =========================================================
+   LIVE CLOCK
+   ========================================================= */
 
-        function getNepalISODate() {
-            const parts = new Intl.DateTimeFormat("en-CA", {
-                timeZone: NEPAL_TIMEZONE,
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit"
-            }).formatToParts(new Date());
+setInterval(
+    updateTimeDisplay,
+    1000
+);
 
-            let year = "", month = "", day = "";
-            parts.forEach(part => {
-                if (part.type === "year") year = part.value;
-                if (part.type === "month") month = part.value;
-                if (part.type === "day") day = part.value;
-            });
-
-            return `${year}-${month}-${day}`;
-        }
-
-        const todayNepal = getNepalISODate();
-        datePicker.value = todayNepal;
+updateTimeDisplay();
 
 
-        /* =========================================================
-           CLEAR TABLE & HELPERS
-           ========================================================= */
+/* =========================================================
+   INITIAL LOAD
+   ========================================================= */
 
-        function clearAttendanceTable() {
-            attendanceTableBody.innerHTML = "";
-        }
+loadAttendanceForDate(
+    todayNepal
+);
 
-
-        function createTableCell(value, className = "") {
-            const cell = document.createElement("td");
-            cell.textContent = value === undefined || value === null ? "" : String(value);
-            if (className) {
-                cell.className = className;
-            }
-            return cell;
-        }
-
-
-        /* =========================================================
-           LOAD ATTENDANCE FOR DATE
-           ========================================================= */
-
-        async function loadAttendanceForDate(selectedDate) {
-            try {
-                const students = await getStudents();
-                const studentList = Array.isArray(students) ? students : [];
-                const totalStudents = studentList.length;
-
-                const holiday = await isSchoolHoliday(selectedDate);
-                clearAttendanceTable();
-
-                if (holiday) {
-                    totalValue.textContent = String(totalStudents);
-                    presentValue.textContent = "0";
-                    absentValue.textContent = "0";
-                    titleLabel.textContent = `Attendance Register: ${selectedClass} - ${selectedSection} (HOLIDAY)`;
-                    dateLabel.textContent = `Date: ${selectedDate} - HOLIDAY`;
-                    return;
-                }
-
-                titleLabel.textContent = `Attendance Register: ${selectedClass} - ${selectedSection}`;
-
-                const attendanceData = await getAttendance(selectedDate);
-                const attendanceRecords = Array.isArray(attendanceData) ? attendanceData : [];
-
-                let presentCount = 0;
-                let absentCount = 0;
-                const displayRecords = [];
-
-                attendanceRecords.forEach(record => {
-                    const status = String(record && record.status !== undefined ? record.status : "").trim().toUpperCase();
-
-                    if (status !== "PRESENT" && status !== "ABSENT") {
-                        return;
-                    }
-
-                    const studentId = String(record && record.student_id !== undefined ? record.student_id : "").trim();
-                    const name = String(record && record.name !== undefined ? record.name : "").trim();
-                    const timeMarked = String(record && record.attendance_time !== undefined ? record.attendance_time : "").trim();
-
-                    if (status === "PRESENT") {
-                        presentCount++;
-                    } else if (status === "ABSENT") {
-                        absentCount++;
-                    }
-
-                    displayRecords.push({
-                        student_id: studentId,
-                        name: name,
-                        status: status,
-                        time_marked: timeMarked
-                    });
-                });
-
-                totalValue.textContent = String(totalStudents);
-                presentValue.textContent = String(presentCount);
-                absentValue.textContent = String(absentCount);
-
-                displayRecords.forEach(record => {
-                    const row = document.createElement("tr");
-
-                    row.appendChild(createTableCell(record.student_id));
-                    row.appendChild(createTableCell(record.name));
-
-                    const statusCell = createTableCell(record.status);
-                    if (record.status === "PRESENT") {
-                        statusCell.classList.add("status-present");
-                    } else if (record.status === "ABSENT") {
-                        statusCell.classList.add("status-absent");
-                    }
-
-                    row.appendChild(statusCell);
-                    row.appendChild(createTableCell(record.time_marked));
-
-                    attendanceTableBody.appendChild(row);
-                });
-
-                if (displayRecords.length === 0) {
-                    clearAttendanceTable();
-                    dateLabel.textContent = `Date: ${selectedDate} - No attendance recorded yet`;
-                } else {
-                    dateLabel.textContent = `Date: ${selectedDate}`;
-                }
-
-            } catch (error) {
-                showDialog("Database Error", "Could not load attendance data:\n\n" + (error && error.message ? error.message : String(error)));
-                console.error("ATTENDANCE DISPLAY ERROR:", error);
-            }
-        }
-
-
-        /* =========================================================
-           EVENT LISTENERS & CLOCK
-           ========================================================= */
-
-        async function onDateChanged() {
-            const selectedDate = datePicker.value;
-            if (!selectedDate) return;
-
-            fetchButton.disabled = true;
-            try {
-                await loadAttendanceForDate(selectedDate);
-            } finally {
-                fetchButton.disabled = false;
-            }
-        }
-
-        fetchButton.addEventListener("click", onDateChanged);
-
-        function returnToAdmin() {
-            window.location.href = "admin_panel.html";
-        }
-
-        backButton.addEventListener("click", returnToAdmin);
-
-
-        /* =========================================================
-           DIALOG MANAGEMENT
-           ========================================================= */
-
-        function showDialog(title, message) {
-            document.getElementById("dialogTitle").textContent = title;
-            document.getElementById("dialogContent").textContent = message;
-            document.getElementById("dialogOverlay").classList.add("visible");
-        }
-
-        function closeDialog() {
-            document.getElementById("dialogOverlay").classList.remove("visible");
-        }
-
-        document.getElementById("dialogButton").addEventListener("click", closeDialog);
-        document.getElementById("dialogOverlay").addEventListener("click", function(event) {
-            if (event.target === event.currentTarget) {
-                closeDialog();
-            }
-        });
-
-
-        /* =========================================================
-           INITIALIZATION
-           ========================================================= */
-
-        setInterval(updateTimeDisplay, 1000);
-        updateTimeDisplay();
-        loadAttendanceForDate(todayNepal);
-
-    </script>
+</script>
 
 </body>
 </html>
