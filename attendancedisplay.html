@@ -630,7 +630,6 @@ function getNepalToday(){
                 ] =
                     part.value;
             }
-
         }
     );
 
@@ -990,33 +989,29 @@ async function loadAttendanceDirectFromSupabase(
         studentsResponse,
         attendanceResponse
     ] =
-        await Promise.all(
-            [
+        await Promise.all([
+            fetch(
+                studentsUrl,
+                {
+                    headers:
+                        SUPABASE_REST_HEADERS,
 
-                fetch(
-                    studentsUrl,
-                    {
-                        headers:
-                            SUPABASE_REST_HEADERS,
+                    cache:
+                        "no-store"
+                }
+            ),
 
-                        cache:
-                            "no-store"
-                    }
-                ),
+            fetch(
+                attendanceUrl,
+                {
+                    headers:
+                        SUPABASE_REST_HEADERS,
 
-                fetch(
-                    attendanceUrl,
-                    {
-                        headers:
-                            SUPABASE_REST_HEADERS,
-
-                        cache:
-                            "no-store"
-                    }
-                )
-
-            ]
-        );
+                    cache:
+                        "no-store"
+                }
+            )
+        ]);
 
 
     const studentsText =
@@ -1322,7 +1317,7 @@ async function loadAttendance(){
 
 
         /*
-         * Keep compatibility with the older endpoint.
+         * Compatibility fallback
          */
 
         if(
@@ -1364,7 +1359,7 @@ async function loadAttendance(){
 
 
         /*
-         * Direct Supabase fallback.
+         * Supabase fallback
          */
 
         if(
@@ -1446,18 +1441,6 @@ async function loadAttendance(){
         }
 
 
-        /*
-         * FIX:
-         *
-         * The previous version used:
-         *
-         *     renderAttendanceData(data)
-         *
-         * but "data" was never defined.
-         *
-         * We now correctly use the API response.
-         */
-
         const data =
             result &&
             result.data !==
@@ -1497,7 +1480,7 @@ async function loadAttendance(){
 
 
 /* =========================================================
-   INITIALIZE
+   INITIALIZATION
    ========================================================= */
 
 datePicker.value =
@@ -1530,10 +1513,6 @@ document.getElementById(
     "backButton"
 ).onclick =
     () => {
-
-        /*
-         * Preserve the exact class and section when returning.
-         */
 
         const returnUrl =
             "admin_panel.html" +
