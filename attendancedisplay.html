@@ -25,10 +25,6 @@
             overflow: hidden;
         }
 
-        /* =====================================================
-           MAIN WINDOW
-           ===================================================== */
-
         .main-window {
             width: 100%;
             height: 100vh;
@@ -37,10 +33,6 @@
             flex-direction: column;
             gap: 15px;
         }
-
-        /* =====================================================
-           HEADER CARD
-           ===================================================== */
 
         .header-card {
             width: 100%;
@@ -54,10 +46,6 @@
             gap: 0;
             flex-shrink: 0;
         }
-
-        /* =====================================================
-           LOGO
-           ===================================================== */
 
         .logo-container {
             width: 50px;
@@ -75,10 +63,6 @@
             height: 50px;
             object-fit: contain;
         }
-
-        /* =====================================================
-           TITLE
-           ===================================================== */
 
         .title-box {
             display: flex;
@@ -112,10 +96,6 @@
             flex: 1;
             min-width: 15px;
         }
-
-        /* =====================================================
-           DATE CONTROL
-           ===================================================== */
 
         .date-box {
             display: flex;
@@ -190,10 +170,6 @@
             min-width: 15px;
         }
 
-        /* =====================================================
-           BACK BUTTON
-           ===================================================== */
-
         .back-button {
             width: 160px;
             min-width: 160px;
@@ -215,10 +191,6 @@
             background-color: #0077c8;
             color: #ffffff;
         }
-
-        /* =====================================================
-           STATISTICS
-           ===================================================== */
 
         .stats-layout {
             width: 100%;
@@ -287,10 +259,6 @@
             color: #e74c3c;
         }
 
-        /* =====================================================
-           ATTENDANCE TABLE
-           ===================================================== */
-
         .table-container {
             flex: 1;
             min-height: 0;
@@ -332,15 +300,6 @@
         .attendance-table thead th:last-child {
             border-top-right-radius: 7px;
         }
-
-        /*
-         * QHeaderView configuration:
-         *
-         * Student ID  = Interactive, 140px
-         * Student Name = Stretch
-         * Status      = Interactive, 130px
-         * Time Marked = Interactive, 260px
-         */
 
         .attendance-table th:nth-child(1),
         .attendance-table td:nth-child(1) {
@@ -386,10 +345,6 @@
             background-color: #f5faff;
         }
 
-        /* =====================================================
-           STATUS DISPLAY
-           ===================================================== */
-
         .status-present {
             color: #27ae60 !important;
             font-weight: 700;
@@ -399,10 +354,6 @@
             color: #e74c3c !important;
             font-weight: 700;
         }
-
-        /* =====================================================
-           SCROLLBAR
-           ===================================================== */
 
         .table-container::-webkit-scrollbar {
             width: 10px;
@@ -421,10 +372,6 @@
         .table-container::-webkit-scrollbar-thumb:hover {
             background: #8fbddd;
         }
-
-        /* =====================================================
-           DIALOG
-           ===================================================== */
 
         .dialog-overlay {
             position: fixed;
@@ -486,10 +433,6 @@
         .dialog-button:hover {
             background-color: #005a9e;
         }
-
-        /* =====================================================
-           RESPONSIVE FALLBACK
-           ===================================================== */
 
         @media (max-width: 950px) {
 
@@ -567,10 +510,6 @@
 
     <main class="main-window">
 
-        <!-- =================================================
-             TOP HEADER BAR
-             ================================================= -->
-
         <section class="header-card">
 
             <div class="logo-container">
@@ -602,10 +541,6 @@
 
             <div class="header-spacer"></div>
 
-            <!-- =================================================
-                 DATE PICKER
-                 ================================================= -->
-
             <div class="date-box">
 
                 <label
@@ -635,10 +570,6 @@
 
             <div class="header-spacing"></div>
 
-            <!-- =================================================
-                 BACK TO ADMIN
-                 ================================================= -->
-
             <button
                 id="backButton"
                 class="back-button"
@@ -649,10 +580,6 @@
 
         </section>
 
-
-        <!-- =================================================
-             STATISTICS
-             ================================================= -->
 
         <section class="stats-layout">
 
@@ -706,10 +633,6 @@
         </section>
 
 
-        <!-- =================================================
-             ATTENDANCE TABLE
-             ================================================= -->
-
         <section class="table-container">
 
             <table
@@ -735,10 +658,6 @@
 
     </main>
 
-
-    <!-- =====================================================
-         QMESSAGEBOX EQUIVALENT
-         ===================================================== -->
 
     <div
         id="dialogOverlay"
@@ -782,30 +701,42 @@
 
 
     <script>
-        /* =========================================================
-           ATTENDANCEDISPLAY.PY → JAVASCRIPT
-           ========================================================= */
 
         /*
-         * Default values corresponding to:
+         * =========================================================
+         * API CONFIGURATION
+         * =========================================================
          *
-         * selected_class="Class 6"
-         * selected_section="Section A"
-         */
-        const API_BASE_URL = window.location.origin;
-        const API_BASE = API_BASE_URL;
-        const DEFAULT_CLASS = "Class 6";
-        const DEFAULT_SECTION = "Section A";
-
-        const LOGO_FILENAME = "logo.png";
-
-        /*
-         * Nepal timezone.
+         * IMPORTANT:
+         * API_BASE and API_BASE_URL are declared ONLY ONCE.
          *
-         * This intentionally does not rely on the computer's
-         * local timezone.
+         * This fixes:
+         *
+         *   Cannot redeclare block-scoped variable 'API_BASE'
+         *
+         * and:
+         *
+         *   API_BASE_URL is not defined
+         *
          */
-        const NEPAL_TIMEZONE = "Asia/Kathmandu";
+
+        const API_BASE_URL =
+            window.location.origin;
+
+        const API_BASE =
+            API_BASE_URL;
+
+        const DEFAULT_CLASS =
+            "Class 6";
+
+        const DEFAULT_SECTION =
+            "Section A";
+
+        const LOGO_FILENAME =
+            "logo.png";
+
+        const NEPAL_TIMEZONE =
+            "Asia/Kathmandu";
 
 
         /* =========================================================
@@ -814,13 +745,17 @@
 
         function extractClassNumber(classText) {
 
-            classText = String(classText).trim();
+            classText =
+                String(
+                    classText
+                ).trim();
 
             if (
                 classText
                     .toLowerCase()
                     .startsWith("class ")
             ) {
+
                 return classText
                     .substring(6)
                     .trim();
@@ -832,13 +767,17 @@
 
         function extractSection(sectionText) {
 
-            sectionText = String(sectionText).trim();
+            sectionText =
+                String(
+                    sectionText
+                ).trim();
 
             if (
                 sectionText
                     .toLowerCase()
                     .startsWith("section ")
             ) {
+
                 return sectionText
                     .substring(8)
                     .trim()
@@ -850,26 +789,15 @@
 
 
         /* =========================================================
-           COMMAND LINE / URL PARAMETER EQUIVALENT
-           =========================================================
-
-           Python accepts:
-
-               --class "Class 10"
-               --section "Section B"
-
-           Browsers cannot receive those argparse arguments directly,
-           so this page also supports:
-
-               attendancedisplay.html?class=Class%2010&section=Section%20B
-
-           The defaults remain exactly the same.
-        */
+           URL CONFIGURATION
+           ========================================================= */
 
         function getConfiguration() {
 
             const params =
-                new URLSearchParams(window.location.search);
+                new URLSearchParams(
+                    window.location.search
+                );
 
             const selectedClass =
                 params.get("class") ||
@@ -898,10 +826,14 @@
             configuration.selectedSection;
 
         const classNumber =
-            extractClassNumber(selectedClass);
+            extractClassNumber(
+                selectedClass
+            );
 
         const section =
-            extractSection(selectedSection);
+            extractSection(
+                selectedSection
+            );
 
 
         /* =========================================================
@@ -909,28 +841,44 @@
            ========================================================= */
 
         const titleLabel =
-            document.getElementById("titleLabel");
+            document.getElementById(
+                "titleLabel"
+            );
 
         const dateLabel =
-            document.getElementById("dateLabel");
+            document.getElementById(
+                "dateLabel"
+            );
 
         const datePicker =
-            document.getElementById("datePicker");
+            document.getElementById(
+                "datePicker"
+            );
 
         const fetchButton =
-            document.getElementById("fetchButton");
+            document.getElementById(
+                "fetchButton"
+            );
 
         const backButton =
-            document.getElementById("backButton");
+            document.getElementById(
+                "backButton"
+            );
 
         const totalValue =
-            document.getElementById("totalValue");
+            document.getElementById(
+                "totalValue"
+            );
 
         const presentValue =
-            document.getElementById("presentValue");
+            document.getElementById(
+                "presentValue"
+            );
 
         const absentValue =
-            document.getElementById("absentValue");
+            document.getElementById(
+                "absentValue"
+            );
 
         const attendanceTableBody =
             document.getElementById(
@@ -943,29 +891,38 @@
            ========================================================= */
 
         titleLabel.textContent =
-            `Attendance Register: ${selectedClass} - ${selectedSection}`;
+            `Attendance Register: ` +
+            `${selectedClass} - ` +
+            `${selectedSection}`;
 
 
         /* =========================================================
            LOGO FALLBACK
            ========================================================= */
 
-        function tryFallbackLogo(image) {
+        function tryFallbackLogo(
+            image
+        ) {
 
             const fallback =
                 "486624203_601802256148254_3403736131493055483_n.png";
 
             if (
-                image.dataset.fallbackUsed !== "true"
+                image.dataset.fallbackUsed !==
+                "true"
             ) {
 
-                image.dataset.fallbackUsed = "true";
+                image.dataset.fallbackUsed =
+                    "true";
 
-                image.src = fallback;
+                image.src =
+                    fallback;
 
-            } else {
+            }
+            else {
 
-                image.style.display = "none";
+                image.style.display =
+                    "none";
             }
         }
 
@@ -980,15 +937,32 @@
                 new Intl.DateTimeFormat(
                     "en-US",
                     {
-                        timeZone: NEPAL_TIMEZONE,
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                        second: "2-digit",
-                        hour12: true
+                        timeZone:
+                            NEPAL_TIMEZONE,
+
+                        weekday:
+                            "long",
+
+                        month:
+                            "long",
+
+                        day:
+                            "numeric",
+
+                        year:
+                            "numeric",
+
+                        hour:
+                            "numeric",
+
+                        minute:
+                            "2-digit",
+
+                        second:
+                            "2-digit",
+
+                        hour12:
+                            true
                     }
                 );
 
@@ -999,17 +973,19 @@
 
             const result = {};
 
-            parts.forEach(function(part) {
-                result[part.type] = part.value;
-            });
+            parts.forEach(
+                function(part) {
+
+                    result[part.type] =
+                        part.value;
+
+                }
+            );
 
             return result;
         }
 
 
-        /*
-         * Exact equivalent of update_time_display().
-         */
         function updateTimeDisplay() {
 
             const now =
@@ -1032,31 +1008,16 @@
 
         /* =========================================================
            SCHOOL HOLIDAY BRIDGE
-           =========================================================
+           ========================================================= */
 
-           The Python application imports:
-
-               from school_calendar import is_school_holiday
-
-           That Python function cannot execute natively inside a
-           normal browser. This bridge first looks for a JavaScript
-           implementation supplied by the converted calendar
-           application.
-
-           If your school_calendar logic is exposed through an API,
-           set SCHOOL_CALENDAR_API below.
-        */
-
-        const SCHOOL_CALENDAR_API = "";
+        const SCHOOL_CALENDAR_API =
+            "";
 
 
-        async function isSchoolHoliday(selectedDate) {
+        async function isSchoolHoliday(
+            selectedDate
+        ) {
 
-            /*
-             * If another converted page/application supplies the
-             * exact school-calendar implementation globally,
-             * use it.
-             */
             if (
                 typeof window.is_school_holiday ===
                 "function"
@@ -1070,16 +1031,9 @@
             }
 
 
-            /*
-             * Optional backend bridge.
-             *
-             * Example response:
-             *
-             * {
-             *     "holiday": true
-             * }
-             */
-            if (SCHOOL_CALENDAR_API) {
+            if (
+                SCHOOL_CALENDAR_API
+            ) {
 
                 const separator =
                     SCHOOL_CALENDAR_API.includes("?")
@@ -1089,10 +1043,16 @@
                 const response =
                     await fetch(
                         `${SCHOOL_CALENDAR_API}` +
-                        `${separator}date=${encodeURIComponent(selectedDate)}`
+                        `${separator}date=` +
+                        `${encodeURIComponent(
+                            selectedDate
+                        )}`
                     );
 
-                if (!response.ok) {
+                if (
+                    !response.ok
+                ) {
+
                     throw new Error(
                         `School calendar request failed: ` +
                         `${response.status}`
@@ -1108,16 +1068,6 @@
             }
 
 
-            /*
-             * Weekend handling.
-
-             * This does NOT replace the original
-             * school_calendar.py implementation.
-             *
-             * It only supplies the universal school-calendar
-             * weekend behavior when no converted calendar/backend
-             * function has been provided.
-             */
             const date =
                 new Date(
                     `${selectedDate}T00:00:00`
@@ -1126,67 +1076,40 @@
             const day =
                 date.getDay();
 
-            return day === 0 || day === 6;
+            return (
+                day === 0 ||
+                day === 6
+            );
         }
 
 
         /* =========================================================
-           SUPABASE BACKEND BRIDGE
-           =========================================================
+           SUPABASE CONFIGURATION
+           ========================================================= */
 
-           Python uses:
+        const SUPABASE_URL =
+            "https://bnhpestcxuisikkbhwkc.supabase.co";
 
-               from database import supabase
-
-           and then:
-
-               supabase.table("students")
-                   .select(...)
-                   .eq(...)
-                   .execute()
-
-               supabase.table("attendance")
-                   .select("*")
-                   .eq(...)
-                   .execute()
-
-           A browser cannot import the Python database.py module
-           directly.
-
-           Therefore this HTML provides two supported bridge modes:
-
-           1. Existing web backend:
-                 Set API_BASE.
-
-           2. Direct Supabase REST:
-                 Set SUPABASE_URL and SUPABASE_ANON_KEY.
-
-           The database.py credentials/connection are NOT guessed
-           or replaced with invented values.
-        */
-
-        const API_BASE = window.location.origin;
-
-        const SUPABASE_URL = "https://bnhpestcxuisikkbhwkc.supabase.co";
-
-        const SUPABASE_ANON_KEY = "sb_publishable_LjCEE0ik3tcJBPpPqcESPw_31ImMTle";
+        const SUPABASE_ANON_KEY =
+            "sb_publishable_LjCEE0ik3tcJBPpPqcESPw_31ImMTle";
 
 
-        /*
-         * Generic backend request.
-         */
+        /* =========================================================
+           GENERIC BACKEND REQUEST
+           ========================================================= */
+
         async function backendRequest(
             table,
             query
         ) {
 
             /*
-             * Preferred bridge:
-             *
-             * A server-side API can preserve the existing
-             * database.py architecture.
+             * Existing backend bridge.
              */
-            if (API_BASE) {
+
+            if (
+                API_BASE
+            ) {
 
                 const separator =
                     API_BASE.includes("?")
@@ -1195,24 +1118,34 @@
 
                 const url =
                     `${API_BASE}${separator}` +
-                    `table=${encodeURIComponent(table)}` +
-                    `query=${encodeURIComponent(
-                        JSON.stringify(query)
+                    `table=${encodeURIComponent(
+                        table
+                    )}` +
+                    `&query=${encodeURIComponent(
+                        JSON.stringify(
+                            query
+                        )
                     )}`;
 
                 const response =
                     await fetch(
                         url,
                         {
-                            method: "GET",
-                            headers: {
-                                "Accept":
-                                    "application/json"
-                            }
+                            method:
+                                "GET",
+
+                            headers:
+                                {
+                                    "Accept":
+                                        "application/json"
+                                }
                         }
                     );
 
-                if (!response.ok) {
+                if (
+                    !response.ok
+                ) {
+
                     throw new Error(
                         `Backend request failed: ` +
                         `${response.status} ` +
@@ -1224,9 +1157,10 @@
             }
 
 
-            /*
-             * Direct Supabase REST bridge.
-             */
+            /* =====================================================
+               DIRECT SUPABASE REST
+               ===================================================== */
+
             if (
                 SUPABASE_URL &&
                 SUPABASE_ANON_KEY
@@ -1237,35 +1171,44 @@
                         `${SUPABASE_URL}/rest/v1/${table}`
                     );
 
-                Object.keys(query)
-                    .forEach(function(key) {
+                Object.keys(
+                    query
+                )
+                .forEach(
+                    function(key) {
 
                         url.searchParams.set(
                             key,
                             query[key]
                         );
 
-                    });
+                    }
+                );
 
                 const response =
                     await fetch(
                         url.toString(),
                         {
-                            method: "GET",
-                            headers: {
-                                "apikey":
-                                    SUPABASE_ANON_KEY,
+                            method:
+                                "GET",
 
-                                "Authorization":
-                                    `Bearer ${SUPABASE_ANON_KEY}`,
+                            headers:
+                                {
+                                    "apikey":
+                                        SUPABASE_ANON_KEY,
 
-                                "Accept":
-                                    "application/json"
-                            }
+                                    "Authorization":
+                                        `Bearer ${SUPABASE_ANON_KEY}`,
+
+                                    "Accept":
+                                        "application/json"
+                                }
                         }
                     );
 
-                if (!response.ok) {
+                if (
+                    !response.ok
+                ) {
 
                     const errorText =
                         await response.text();
@@ -1281,9 +1224,6 @@
             }
 
 
-            /*
-             * No browser backend has been configured.
-             */
             throw new Error(
                 "No database backend is configured. " +
                 "Connect the existing database.py logic " +
@@ -1299,18 +1239,8 @@
 
         async function getStudents() {
 
-            /*
-             * Equivalent to:
-
-             supabase
-                 .table("students")
-                 .select("student_id, name")
-                 .eq("class_number", self.class_number)
-                 .eq("section", self.section)
-                 .execute()
-             */
-
             const query = {
+
                 "select":
                     "student_id,name",
 
@@ -1336,19 +1266,8 @@
             selectedDate
         ) {
 
-            /*
-             * Equivalent to:
-
-             supabase
-                 .table("attendance")
-                 .select("*")
-                 .eq("class_number", self.class_number)
-                 .eq("section", self.section)
-                 .eq("attendance_date", selected_date)
-                 .execute()
-             */
-
             const query = {
+
                 "select":
                     "*",
 
@@ -1379,12 +1298,20 @@
                 new Intl.DateTimeFormat(
                     "en-CA",
                     {
-                        timeZone: NEPAL_TIMEZONE,
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit"
+                        timeZone:
+                            NEPAL_TIMEZONE,
+
+                        year:
+                            "numeric",
+
+                        month:
+                            "2-digit",
+
+                        day:
+                            "2-digit"
                     }
-                ).formatToParts(
+                )
+                .formatToParts(
                     new Date()
                 );
 
@@ -1392,23 +1319,42 @@
             let month = "";
             let day = "";
 
-            parts.forEach(function(part) {
+            parts.forEach(
+                function(part) {
 
-                if (part.type === "year") {
-                    year = part.value;
+                    if (
+                        part.type ===
+                        "year"
+                    ) {
+
+                        year =
+                            part.value;
+                    }
+
+                    if (
+                        part.type ===
+                        "month"
+                    ) {
+
+                        month =
+                            part.value;
+                    }
+
+                    if (
+                        part.type ===
+                        "day"
+                    ) {
+
+                        day =
+                            part.value;
+                    }
+
                 }
+            );
 
-                if (part.type === "month") {
-                    month = part.value;
-                }
-
-                if (part.type === "day") {
-                    day = part.value;
-                }
-
-            });
-
-            return `${year}-${month}-${day}`;
+            return (
+                `${year}-${month}-${day}`
+            );
         }
 
 
@@ -1425,7 +1371,8 @@
 
         function clearAttendanceTable() {
 
-            attendanceTableBody.innerHTML = "";
+            attendanceTableBody.innerHTML =
+                "";
         }
 
 
@@ -1439,7 +1386,9 @@
         ) {
 
             const cell =
-                document.createElement("td");
+                document.createElement(
+                    "td"
+                );
 
             cell.textContent =
                 value === undefined ||
@@ -1447,7 +1396,10 @@
                     ? ""
                     : String(value);
 
-            if (className) {
+            if (
+                className
+            ) {
+
                 cell.className =
                     className;
             }
@@ -1466,17 +1418,13 @@
 
             try {
 
-                /*
-                 * -------------------------------------------------
-                 * 1. Get all enrolled students
-                 * -------------------------------------------------
-                 */
-
                 const students =
                     await getStudents();
 
                 const studentList =
-                    Array.isArray(students)
+                    Array.isArray(
+                        students
+                    )
                         ? students
                         : [];
 
@@ -1484,37 +1432,23 @@
                     studentList.length;
 
 
-                /*
-                 * -------------------------------------------------
-                 * 2. Check school holiday
-                 * -------------------------------------------------
-                 */
-
                 const holiday =
                     await isSchoolHoliday(
                         selectedDate
                     );
 
 
-                /*
-                 * -------------------------------------------------
-                 * 3. Clear old table FIRST
-                 * -------------------------------------------------
-                 */
-
                 clearAttendanceTable();
 
 
-                /*
-                 * -------------------------------------------------
-                 * 4. HOLIDAY
-                 * -------------------------------------------------
-                 */
-
-                if (holiday) {
+                if (
+                    holiday
+                ) {
 
                     totalValue.textContent =
-                        String(totalStudents);
+                        String(
+                            totalStudents
+                        );
 
                     presentValue.textContent =
                         "0";
@@ -1525,7 +1459,8 @@
                     titleLabel.textContent =
                         `Attendance Register: ` +
                         `${selectedClass} - ` +
-                        `${selectedSection} (HOLIDAY)`;
+                        `${selectedSection} ` +
+                        `(HOLIDAY)`;
 
                     dateLabel.textContent =
                         `Date: ${selectedDate} - HOLIDAY`;
@@ -1534,23 +1469,11 @@
                 }
 
 
-                /*
-                 * -------------------------------------------------
-                 * 5. SCHOOL DAY
-                 * -------------------------------------------------
-                 */
-
                 titleLabel.textContent =
                     `Attendance Register: ` +
                     `${selectedClass} - ` +
                     `${selectedSection}`;
 
-
-                /*
-                 * -------------------------------------------------
-                 * 6. Get ONLY actual attendance records
-                 * -------------------------------------------------
-                 */
 
                 const attendanceData =
                     await getAttendance(
@@ -1558,21 +1481,21 @@
                     );
 
                 const attendanceRecords =
-                    Array.isArray(attendanceData)
+                    Array.isArray(
+                        attendanceData
+                    )
                         ? attendanceData
                         : [];
 
 
-                /*
-                 * -------------------------------------------------
-                 * 7. Calculate actual Present / Absent
-                 * -------------------------------------------------
-                 */
+                let presentCount =
+                    0;
 
-                let presentCount = 0;
-                let absentCount = 0;
+                let absentCount =
+                    0;
 
-                const displayRecords = [];
+                const displayRecords =
+                    [];
 
 
                 attendanceRecords.forEach(
@@ -1581,7 +1504,8 @@
                         const status =
                             String(
                                 record &&
-                                record.status !== undefined
+                                record.status !==
+                                    undefined
                                     ? record.status
                                     : ""
                             )
@@ -1589,15 +1513,13 @@
                             .toUpperCase();
 
 
-                        /*
-                         * Ignore anything that is not
-                         * actually PRESENT or ABSENT.
-                         */
-
                         if (
-                            status !== "PRESENT" &&
-                            status !== "ABSENT"
+                            status !==
+                                "PRESENT" &&
+                            status !==
+                                "ABSENT"
                         ) {
+
                             return;
                         }
 
@@ -1605,7 +1527,8 @@
                         const studentId =
                             String(
                                 record &&
-                                record.student_id !== undefined
+                                record.student_id !==
+                                    undefined
                                     ? record.student_id
                                     : ""
                             )
@@ -1615,7 +1538,8 @@
                         const name =
                             String(
                                 record &&
-                                record.name !== undefined
+                                record.name !==
+                                    undefined
                                     ? record.name
                                     : ""
                             )
@@ -1625,66 +1549,74 @@
                         const timeMarked =
                             String(
                                 record &&
-                                record.attendance_time !== undefined
+                                record.attendance_time !==
+                                    undefined
                                     ? record.attendance_time
                                     : ""
                             )
                             .trim();
 
 
-                        if (status === "PRESENT") {
+                        if (
+                            status ===
+                            "PRESENT"
+                        ) {
+
                             presentCount++;
+
                         }
-                        else if (status === "ABSENT") {
+                        else if (
+                            status ===
+                            "ABSENT"
+                        ) {
+
                             absentCount++;
                         }
 
 
-                        displayRecords.push({
-                            student_id:
-                                studentId,
+                        displayRecords.push(
+                            {
+                                student_id:
+                                    studentId,
 
-                            name:
-                                name,
+                                name:
+                                    name,
 
-                            status:
-                                status,
+                                status:
+                                    status,
 
-                            time_marked:
-                                timeMarked
-                        });
+                                time_marked:
+                                    timeMarked
+                            }
+                        );
 
                     }
                 );
 
 
-                /*
-                 * -------------------------------------------------
-                 * 8. Update statistic cards
-                 * -------------------------------------------------
-                 */
-
                 totalValue.textContent =
-                    String(totalStudents);
+                    String(
+                        totalStudents
+                    );
 
                 presentValue.textContent =
-                    String(presentCount);
+                    String(
+                        presentCount
+                    );
 
                 absentValue.textContent =
-                    String(absentCount);
+                    String(
+                        absentCount
+                    );
 
-
-                /*
-                 * -------------------------------------------------
-                 * 9. Put ONLY actual attendance into table
-                 * -------------------------------------------------
-                 */
 
                 displayRecords.forEach(
                     function(record) {
 
                         const row =
-                            document.createElement("tr");
+                            document.createElement(
+                                "tr"
+                            );
 
 
                         row.appendChild(
@@ -1748,14 +1680,9 @@
                 );
 
 
-                /*
-                 * -------------------------------------------------
-                 * 10. If no attendance exists
-                 * -------------------------------------------------
-                 */
-
                 if (
-                    displayRecords.length === 0
+                    displayRecords.length ===
+                    0
                 ) {
 
                     clearAttendanceTable();
@@ -1772,7 +1699,9 @@
                 }
 
             }
-            catch (error) {
+            catch (
+                error
+            ) {
 
                 showDialog(
                     "Database Error",
@@ -1789,7 +1718,9 @@
                     "ATTENDANCE DISPLAY ERROR:"
                 );
 
-                console.error(error);
+                console.error(
+                    error
+                );
             }
         }
 
@@ -1803,11 +1734,15 @@
             const selectedDate =
                 datePicker.value;
 
-            if (!selectedDate) {
+            if (
+                !selectedDate
+            ) {
+
                 return;
             }
 
-            fetchButton.disabled = true;
+            fetchButton.disabled =
+                true;
 
             try {
 
@@ -1818,7 +1753,8 @@
             }
             finally {
 
-                fetchButton.disabled = false;
+                fetchButton.disabled =
+                    false;
             }
         }
 
@@ -1831,16 +1767,7 @@
 
         /* =========================================================
            BACK TO ADMIN
-           =========================================================
-
-           Python:
-
-               admin_panel.py
-
-           Web counterpart:
-
-               admin_panel.html
-        */
+           ========================================================= */
 
         function returnToAdmin() {
 
@@ -1866,15 +1793,18 @@
 
             document.getElementById(
                 "dialogTitle"
-            ).textContent = title;
+            ).textContent =
+                title;
 
             document.getElementById(
                 "dialogContent"
-            ).textContent = message;
+            ).textContent =
+                message;
 
             document.getElementById(
                 "dialogOverlay"
-            ).classList.add(
+            )
+            .classList.add(
                 "visible"
             );
         }
@@ -1884,7 +1814,8 @@
 
             document.getElementById(
                 "dialogOverlay"
-            ).classList.remove(
+            )
+            .classList.remove(
                 "visible"
             );
         }
@@ -1892,7 +1823,8 @@
 
         document.getElementById(
             "dialogButton"
-        ).addEventListener(
+        )
+        .addEventListener(
             "click",
             closeDialog
         );
@@ -1900,7 +1832,8 @@
 
         document.getElementById(
             "dialogOverlay"
-        ).addEventListener(
+        )
+        .addEventListener(
             "click",
             function(event) {
 
@@ -1908,6 +1841,7 @@
                     event.target ===
                     event.currentTarget
                 ) {
+
                     closeDialog();
                 }
 
@@ -1929,15 +1863,7 @@
 
         /* =========================================================
            INITIAL DATA LOAD
-           =========================================================
-
-           Equivalent to:
-
-               self.load_attendance_for_date(
-                   QDate.currentDate()
-                       .toString("yyyy-MM-dd")
-               )
-        */
+           ========================================================= */
 
         loadAttendanceForDate(
             todayNepal
