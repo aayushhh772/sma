@@ -700,40 +700,19 @@
     </div>
 
 
-    <script>
+   <script>
 
         /*
          * =========================================================
          * API CONFIGURATION
          * =========================================================
-         *
-         * IMPORTANT:
-         * API_BASE and API_BASE_URL are declared ONLY ONCE.
-         *
-         * This fixes:
-         *
-         *   Cannot redeclare block-scoped variable 'API_BASE'
-         *
-         * and:
-         *
-         *   API_BASE_URL is not defined
-         *
          */
 
-        const API_BASE =
-            window.location.origin;
-
-        const DEFAULT_CLASS =
-            "Class 6";
-
-        const DEFAULT_SECTION =
-            "Section A";
-
-        const LOGO_FILENAME =
-            "logo.png";
-
-        const NEPAL_TIMEZONE =
-            "Asia/Kathmandu";
+        const API_BASE = window.location.origin;
+        const DEFAULT_CLASS = "Class 6";
+        const DEFAULT_SECTION = "Section A";
+        const LOGO_FILENAME = "logo.png";
+        const NEPAL_TIMEZONE = "Asia/Kathmandu";
 
 
         /* =========================================================
@@ -741,46 +720,19 @@
            ========================================================= */
 
         function extractClassNumber(classText) {
-
-            classText =
-                String(
-                    classText
-                ).trim();
-
-            if (
-                classText
-                    .toLowerCase()
-                    .startsWith("class ")
-            ) {
-
-                return classText
-                    .substring(6)
-                    .trim();
+            classText = String(classText).trim();
+            if (classText.toLowerCase().startsWith("class ")) {
+                return classText.substring(6).trim();
             }
-
             return classText;
         }
 
 
         function extractSection(sectionText) {
-
-            sectionText =
-                String(
-                    sectionText
-                ).trim();
-
-            if (
-                sectionText
-                    .toLowerCase()
-                    .startsWith("section ")
-            ) {
-
-                return sectionText
-                    .substring(8)
-                    .trim()
-                    .toUpperCase();
+            sectionText = String(sectionText).trim();
+            if (sectionText.toLowerCase().startsWith("section ")) {
+                return sectionText.substring(8).trim().toUpperCase();
             }
-
             return sectionText.toUpperCase();
         }
 
@@ -790,136 +742,54 @@
            ========================================================= */
 
         function getConfiguration() {
+            const params = new URLSearchParams(window.location.search);
+            const selectedClass = params.get("class") || params.get("cls") || DEFAULT_CLASS;
+            const selectedSection = params.get("section") || params.get("sec") || DEFAULT_SECTION;
 
-            const params =
-                new URLSearchParams(
-                    window.location.search
-                );
-
-            const selectedClass =
-                params.get("class") ||
-                params.get("cls") ||
-                DEFAULT_CLASS;
-
-            const selectedSection =
-                params.get("section") ||
-                params.get("sec") ||
-                DEFAULT_SECTION;
-
-            return {
-                selectedClass,
-                selectedSection
-            };
+            return { selectedClass, selectedSection };
         }
 
 
-        const configuration =
-            getConfiguration();
-
-        const selectedClass =
-            configuration.selectedClass;
-
-        const selectedSection =
-            configuration.selectedSection;
-
-        const classNumber =
-            extractClassNumber(
-                selectedClass
-            );
-
-        const section =
-            extractSection(
-                selectedSection
-            );
+        const configuration = getConfiguration();
+        const selectedClass = configuration.selectedClass;
+        const selectedSection = configuration.selectedSection;
+        const classNumber = extractClassNumber(selectedClass);
+        const section = extractSection(selectedSection);
 
 
         /* =========================================================
            DOM REFERENCES
            ========================================================= */
 
-        const titleLabel =
-            document.getElementById(
-                "titleLabel"
-            );
-
-        const dateLabel =
-            document.getElementById(
-                "dateLabel"
-            );
-
-        const datePicker =
-            document.getElementById(
-                "datePicker"
-            );
-
-        const fetchButton =
-            document.getElementById(
-                "fetchButton"
-            );
-
-        const backButton =
-            document.getElementById(
-                "backButton"
-            );
-
-        const totalValue =
-            document.getElementById(
-                "totalValue"
-            );
-
-        const presentValue =
-            document.getElementById(
-                "presentValue"
-            );
-
-        const absentValue =
-            document.getElementById(
-                "absentValue"
-            );
-
-        const attendanceTableBody =
-            document.getElementById(
-                "attendanceTableBody"
-            );
+        const titleLabel = document.getElementById("titleLabel");
+        const dateLabel = document.getElementById("dateLabel");
+        const datePicker = document.getElementById("datePicker");
+        const fetchButton = document.getElementById("fetchButton");
+        const backButton = document.getElementById("backButton");
+        const totalValue = document.getElementById("totalValue");
+        const presentValue = document.getElementById("presentValue");
+        const absentValue = document.getElementById("absentValue");
+        const attendanceTableBody = document.getElementById("attendanceTableBody");
 
 
         /* =========================================================
            INITIAL UI
            ========================================================= */
 
-        titleLabel.textContent =
-            `Attendance Register: ` +
-            `${selectedClass} - ` +
-            `${selectedSection}`;
+        titleLabel.textContent = `Attendance Register: ${selectedClass} - ${selectedSection}`;
 
 
         /* =========================================================
            LOGO FALLBACK
            ========================================================= */
 
-        function tryFallbackLogo(
-            image
-        ) {
-
-            const fallback =
-                "486624203_601802256148254_3403736131493055483_n.png";
-
-            if (
-                image.dataset.fallbackUsed !==
-                "true"
-            ) {
-
-                image.dataset.fallbackUsed =
-                    "true";
-
-                image.src =
-                    fallback;
-
-            }
-            else {
-
-                image.style.display =
-                    "none";
+        function tryFallbackLogo(image) {
+            const fallback = "486624203_601802256148254_3403736131493055483_n.png";
+            if (image.dataset.fallbackUsed !== "true") {
+                image.dataset.fallbackUsed = "true";
+                image.src = fallback;
+            } else {
+                image.style.display = "none";
             }
         }
 
@@ -929,77 +799,29 @@
            ========================================================= */
 
         function getNepalDateTimeParts() {
+            const formatter = new Intl.DateTimeFormat("en-US", {
+                timeZone: NEPAL_TIMEZONE,
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true
+            });
 
-            const formatter =
-                new Intl.DateTimeFormat(
-                    "en-US",
-                    {
-                        timeZone:
-                            NEPAL_TIMEZONE,
-
-                        weekday:
-                            "long",
-
-                        month:
-                            "long",
-
-                        day:
-                            "numeric",
-
-                        year:
-                            "numeric",
-
-                        hour:
-                            "numeric",
-
-                        minute:
-                            "2-digit",
-
-                        second:
-                            "2-digit",
-
-                        hour12:
-                            true
-                    }
-                );
-
-            const parts =
-                formatter.formatToParts(
-                    new Date()
-                );
-
+            const parts = formatter.formatToParts(new Date());
             const result = {};
-
-            parts.forEach(
-                function(part) {
-
-                    result[part.type] =
-                        part.value;
-
-                }
-            );
-
+            parts.forEach(part => { result[part.type] = part.value; });
             return result;
         }
 
 
         function updateTimeDisplay() {
-
-            const now =
-                getNepalDateTimeParts();
-
-            const nowString =
-                `${now.weekday}, ` +
-                `${now.month} ` +
-                `${now.day}, ` +
-                `${now.year} - ` +
-                `${now.hour}:` +
-                `${now.minute}:` +
-                `${now.second} ` +
-                `${now.dayPeriod}`;
-
-            dateLabel.textContent =
-                `Date & Time: ${nowString}`;
+            const now = getNepalDateTimeParts();
+            const nowString = `${now.weekday}, ${now.month} ${now.day}, ${now.year} - ${now.hour}:${now.minute}:${now.second} ${now.dayPeriod}`;
+            dateLabel.textContent = `Date & Time: ${nowString}`;
         }
 
 
@@ -1007,281 +829,56 @@
            SCHOOL HOLIDAY BRIDGE
            ========================================================= */
 
-        const SCHOOL_CALENDAR_API =
-            "";
+        const SCHOOL_CALENDAR_API = "";
 
-
-        async function isSchoolHoliday(
-            selectedDate
-        ) {
-
-            if (
-                typeof window.is_school_holiday ===
-                "function"
-            ) {
-
-                return Boolean(
-                    await window.is_school_holiday(
-                        selectedDate
-                    )
-                );
+        async function isSchoolHoliday(selectedDate) {
+            if (typeof window.is_school_holiday === "function") {
+                return Boolean(await window.is_school_holiday(selectedDate));
             }
 
-
-            if (
-                SCHOOL_CALENDAR_API
-            ) {
-
-                const separator =
-                    SCHOOL_CALENDAR_API.includes("?")
-                        ? "&"
-                        : "?";
-
-                const response =
-                    await fetch(
-                        `${SCHOOL_CALENDAR_API}` +
-                        `${separator}date=` +
-                        `${encodeURIComponent(
-                            selectedDate
-                        )}`
-                    );
-
-                if (
-                    !response.ok
-                ) {
-
-                    throw new Error(
-                        `School calendar request failed: ` +
-                        `${response.status}`
-                    );
+            if (SCHOOL_CALENDAR_API) {
+                const separator = SCHOOL_CALENDAR_API.includes("?") ? "&" : "?";
+                const response = await fetch(`${SCHOOL_CALENDAR_API}${separator}date=${encodeURIComponent(selectedDate)}`);
+                if (!response.ok) {
+                    throw new Error(`School calendar request failed: ${response.status}`);
                 }
-
-                const result =
-                    await response.json();
-
-                return Boolean(
-                    result.holiday
-                );
+                const result = await response.json();
+                return Boolean(result.holiday);
             }
 
-
-            const date =
-                new Date(
-                    `${selectedDate}T00:00:00`
-                );
-
-            const day =
-                date.getDay();
-
-            return (
-                day === 0 ||
-                day === 6
-            );
+            const date = new Date(`${selectedDate}T00:00:00`);
+            const day = date.getDay();
+            return (day === 0 || day === 6);
         }
 
 
         /* =========================================================
-           SUPABASE CONFIGURATION
-           ========================================================= */
-
-        const SUPABASE_URL =
-            "https://bnhpestcxuisikkbhwkc.supabase.co";
-
-        const SUPABASE_ANON_KEY =
-            "sb_publishable_LjCEE0ik3tcJBPpPqcESPw_31ImMTle";
-
-
-        /* =========================================================
-           GENERIC BACKEND REQUEST
-           ========================================================= */
-
-        async function backendRequest(
-            table,
-            query
-        ) {
-
-            /*
-             * Existing backend bridge.
-             */
-
-            if (
-                API_BASE
-            ) {
-
-                const separator =
-                    API_BASE.includes("?")
-                        ? "&"
-                        : "?";
-
-                const url =
-                    `${API_BASE}${separator}` +
-                    `table=${encodeURIComponent(
-                        table
-                    )}` +
-                    `&query=${encodeURIComponent(
-                        JSON.stringify(
-                            query
-                        )
-                    )}`;
-
-                const response =
-                    await fetch(
-                        url,
-                        {
-                            method:
-                                "GET",
-
-                            headers:
-                                {
-                                    "Accept":
-                                        "application/json"
-                                }
-                        }
-                    );
-
-                if (
-                    !response.ok
-                ) {
-
-                    throw new Error(
-                        `Backend request failed: ` +
-                        `${response.status} ` +
-                        `${response.statusText}`
-                    );
-                }
-
-                return await response.json();
-            }
-
-
-            /* =====================================================
-               DIRECT SUPABASE REST
-               ===================================================== */
-
-            if (
-                SUPABASE_URL &&
-                SUPABASE_ANON_KEY
-            ) {
-
-                const url =
-                    new URL(
-                        `${SUPABASE_URL}/rest/v1/${table}`
-                    );
-
-                Object.keys(
-                    query
-                )
-                .forEach(
-                    function(key) {
-
-                        url.searchParams.set(
-                            key,
-                            query[key]
-                        );
-
-                    }
-                );
-
-                const response =
-                    await fetch(
-                        url.toString(),
-                        {
-                            method:
-                                "GET",
-
-                            headers:
-                                {
-                                    "apikey":
-                                        SUPABASE_ANON_KEY,
-
-                                    "Authorization":
-                                        `Bearer ${SUPABASE_ANON_KEY}`,
-
-                                    "Accept":
-                                        "application/json"
-                                }
-                        }
-                    );
-
-                if (
-                    !response.ok
-                ) {
-
-                    const errorText =
-                        await response.text();
-
-                    throw new Error(
-                        `Supabase request failed ` +
-                        `(${response.status}): ` +
-                        errorText
-                    );
-                }
-
-                return await response.json();
-            }
-
-
-            throw new Error(
-                "No database backend is configured. " +
-                "Connect the existing database.py logic " +
-                "through API_BASE or provide the " +
-                "Supabase REST configuration."
-            );
-        }
-
-
-        /* =========================================================
-           STUDENT QUERY
+           STUDENT & ATTENDANCE QUERIES (FASTAPI API.PY INTEGRATION)
            ========================================================= */
 
         async function getStudents() {
+            const url = `${API_BASE}/api/students?class_number=${encodeURIComponent(classNumber)}&section=${encodeURIComponent(section)}`;
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch students (${response.status}): ${response.statusText}`);
+            }
 
-            const query = {
-
-                "select":
-                    "student_id,name",
-
-                "class_number":
-                    `eq.${classNumber}`,
-
-                "section":
-                    `eq.${section}`
-            };
-
-            return await backendRequest(
-                "students",
-                query
-            );
+            const result = await response.json();
+            return result.data || result;
         }
 
 
-        /* =========================================================
-           ATTENDANCE QUERY
-           ========================================================= */
+        async function getAttendance(selectedDate) {
+            const url = `${API_BASE}/api/attendance/display?class_number=${encodeURIComponent(classNumber)}&section=${encodeURIComponent(section)}&attendance_date=${encodeURIComponent(selectedDate)}`;
+            const response = await fetch(url);
 
-        async function getAttendance(
-            selectedDate
-        ) {
+            if (!response.ok) {
+                throw new Error(`Failed to fetch attendance (${response.status}): ${response.statusText}`);
+            }
 
-            const query = {
-
-                "select":
-                    "*",
-
-                "class_number":
-                    `eq.${classNumber}`,
-
-                "section":
-                    `eq.${section}`,
-
-                "attendance_date":
-                    `eq.${selectedDate}`
-            };
-
-            return await backendRequest(
-                "attendance",
-                query
-            );
+            const result = await response.json();
+            return result.data || result;
         }
 
 
@@ -1290,117 +887,42 @@
            ========================================================= */
 
         function getNepalISODate() {
+            const parts = new Intl.DateTimeFormat("en-CA", {
+                timeZone: NEPAL_TIMEZONE,
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit"
+            }).formatToParts(new Date());
 
-            const parts =
-                new Intl.DateTimeFormat(
-                    "en-CA",
-                    {
-                        timeZone:
-                            NEPAL_TIMEZONE,
+            let year = "", month = "", day = "";
+            parts.forEach(part => {
+                if (part.type === "year") year = part.value;
+                if (part.type === "month") month = part.value;
+                if (part.type === "day") day = part.value;
+            });
 
-                        year:
-                            "numeric",
-
-                        month:
-                            "2-digit",
-
-                        day:
-                            "2-digit"
-                    }
-                )
-                .formatToParts(
-                    new Date()
-                );
-
-            let year = "";
-            let month = "";
-            let day = "";
-
-            parts.forEach(
-                function(part) {
-
-                    if (
-                        part.type ===
-                        "year"
-                    ) {
-
-                        year =
-                            part.value;
-                    }
-
-                    if (
-                        part.type ===
-                        "month"
-                    ) {
-
-                        month =
-                            part.value;
-                    }
-
-                    if (
-                        part.type ===
-                        "day"
-                    ) {
-
-                        day =
-                            part.value;
-                    }
-
-                }
-            );
-
-            return (
-                `${year}-${month}-${day}`
-            );
+            return `${year}-${month}-${day}`;
         }
 
-
-        const todayNepal =
-            getNepalISODate();
-
-        datePicker.value =
-            todayNepal;
+        const todayNepal = getNepalISODate();
+        datePicker.value = todayNepal;
 
 
         /* =========================================================
-           CLEAR TABLE
+           CLEAR TABLE & HELPERS
            ========================================================= */
 
         function clearAttendanceTable() {
-
-            attendanceTableBody.innerHTML =
-                "";
+            attendanceTableBody.innerHTML = "";
         }
 
 
-        /* =========================================================
-           CREATE TABLE CELL
-           ========================================================= */
-
-        function createTableCell(
-            value,
-            className = ""
-        ) {
-
-            const cell =
-                document.createElement(
-                    "td"
-                );
-
-            cell.textContent =
-                value === undefined ||
-                value === null
-                    ? ""
-                    : String(value);
-
-            if (
-                className
-            ) {
-
-                cell.className =
-                    className;
+        function createTableCell(value, className = "") {
+            const cell = document.createElement("td");
+            cell.textContent = value === undefined || value === null ? "" : String(value);
+            if (className) {
+                cell.className = className;
             }
-
             return cell;
         }
 
@@ -1409,462 +931,149 @@
            LOAD ATTENDANCE FOR DATE
            ========================================================= */
 
-        async function loadAttendanceForDate(
-            selectedDate
-        ) {
-
+        async function loadAttendanceForDate(selectedDate) {
             try {
+                const students = await getStudents();
+                const studentList = Array.isArray(students) ? students : [];
+                const totalStudents = studentList.length;
 
-                const students =
-                    await getStudents();
-
-                const studentList =
-                    Array.isArray(
-                        students
-                    )
-                        ? students
-                        : [];
-
-                const totalStudents =
-                    studentList.length;
-
-
-                const holiday =
-                    await isSchoolHoliday(
-                        selectedDate
-                    );
-
-
+                const holiday = await isSchoolHoliday(selectedDate);
                 clearAttendanceTable();
 
-
-                if (
-                    holiday
-                ) {
-
-                    totalValue.textContent =
-                        String(
-                            totalStudents
-                        );
-
-                    presentValue.textContent =
-                        "0";
-
-                    absentValue.textContent =
-                        "0";
-
-                    titleLabel.textContent =
-                        `Attendance Register: ` +
-                        `${selectedClass} - ` +
-                        `${selectedSection} ` +
-                        `(HOLIDAY)`;
-
-                    dateLabel.textContent =
-                        `Date: ${selectedDate} - HOLIDAY`;
-
+                if (holiday) {
+                    totalValue.textContent = String(totalStudents);
+                    presentValue.textContent = "0";
+                    absentValue.textContent = "0";
+                    titleLabel.textContent = `Attendance Register: ${selectedClass} - ${selectedSection} (HOLIDAY)`;
+                    dateLabel.textContent = `Date: ${selectedDate} - HOLIDAY`;
                     return;
                 }
 
+                titleLabel.textContent = `Attendance Register: ${selectedClass} - ${selectedSection}`;
 
-                titleLabel.textContent =
-                    `Attendance Register: ` +
-                    `${selectedClass} - ` +
-                    `${selectedSection}`;
+                const attendanceData = await getAttendance(selectedDate);
+                const attendanceRecords = Array.isArray(attendanceData) ? attendanceData : [];
 
+                let presentCount = 0;
+                let absentCount = 0;
+                const displayRecords = [];
 
-                const attendanceData =
-                    await getAttendance(
-                        selectedDate
-                    );
+                attendanceRecords.forEach(record => {
+                    const status = String(record && record.status !== undefined ? record.status : "").trim().toUpperCase();
 
-                const attendanceRecords =
-                    Array.isArray(
-                        attendanceData
-                    )
-                        ? attendanceData
-                        : [];
-
-
-                let presentCount =
-                    0;
-
-                let absentCount =
-                    0;
-
-                const displayRecords =
-                    [];
-
-
-                attendanceRecords.forEach(
-                    function(record) {
-
-                        const status =
-                            String(
-                                record &&
-                                record.status !==
-                                    undefined
-                                    ? record.status
-                                    : ""
-                            )
-                            .trim()
-                            .toUpperCase();
-
-
-                        if (
-                            status !==
-                                "PRESENT" &&
-                            status !==
-                                "ABSENT"
-                        ) {
-
-                            return;
-                        }
-
-
-                        const studentId =
-                            String(
-                                record &&
-                                record.student_id !==
-                                    undefined
-                                    ? record.student_id
-                                    : ""
-                            )
-                            .trim();
-
-
-                        const name =
-                            String(
-                                record &&
-                                record.name !==
-                                    undefined
-                                    ? record.name
-                                    : ""
-                            )
-                            .trim();
-
-
-                        const timeMarked =
-                            String(
-                                record &&
-                                record.attendance_time !==
-                                    undefined
-                                    ? record.attendance_time
-                                    : ""
-                            )
-                            .trim();
-
-
-                        if (
-                            status ===
-                            "PRESENT"
-                        ) {
-
-                            presentCount++;
-
-                        }
-                        else if (
-                            status ===
-                            "ABSENT"
-                        ) {
-
-                            absentCount++;
-                        }
-
-
-                        displayRecords.push(
-                            {
-                                student_id:
-                                    studentId,
-
-                                name:
-                                    name,
-
-                                status:
-                                    status,
-
-                                time_marked:
-                                    timeMarked
-                            }
-                        );
-
+                    if (status !== "PRESENT" && status !== "ABSENT") {
+                        return;
                     }
-                );
 
+                    const studentId = String(record && record.student_id !== undefined ? record.student_id : "").trim();
+                    const name = String(record && record.name !== undefined ? record.name : "").trim();
+                    const timeMarked = String(record && record.attendance_time !== undefined ? record.attendance_time : "").trim();
 
-                totalValue.textContent =
-                    String(
-                        totalStudents
-                    );
-
-                presentValue.textContent =
-                    String(
-                        presentCount
-                    );
-
-                absentValue.textContent =
-                    String(
-                        absentCount
-                    );
-
-
-                displayRecords.forEach(
-                    function(record) {
-
-                        const row =
-                            document.createElement(
-                                "tr"
-                            );
-
-
-                        row.appendChild(
-                            createTableCell(
-                                record.student_id
-                            )
-                        );
-
-
-                        row.appendChild(
-                            createTableCell(
-                                record.name
-                            )
-                        );
-
-
-                        const statusCell =
-                            createTableCell(
-                                record.status
-                            );
-
-
-                        if (
-                            record.status ===
-                            "PRESENT"
-                        ) {
-
-                            statusCell.classList.add(
-                                "status-present"
-                            );
-
-                        }
-                        else if (
-                            record.status ===
-                            "ABSENT"
-                        ) {
-
-                            statusCell.classList.add(
-                                "status-absent"
-                            );
-                        }
-
-
-                        row.appendChild(
-                            statusCell
-                        );
-
-
-                        row.appendChild(
-                            createTableCell(
-                                record.time_marked
-                            )
-                        );
-
-
-                        attendanceTableBody.appendChild(
-                            row
-                        );
-
+                    if (status === "PRESENT") {
+                        presentCount++;
+                    } else if (status === "ABSENT") {
+                        absentCount++;
                     }
-                );
 
+                    displayRecords.push({
+                        student_id: studentId,
+                        name: name,
+                        status: status,
+                        time_marked: timeMarked
+                    });
+                });
 
-                if (
-                    displayRecords.length ===
-                    0
-                ) {
+                totalValue.textContent = String(totalStudents);
+                presentValue.textContent = String(presentCount);
+                absentValue.textContent = String(absentCount);
 
+                displayRecords.forEach(record => {
+                    const row = document.createElement("tr");
+
+                    row.appendChild(createTableCell(record.student_id));
+                    row.appendChild(createTableCell(record.name));
+
+                    const statusCell = createTableCell(record.status);
+                    if (record.status === "PRESENT") {
+                        statusCell.classList.add("status-present");
+                    } else if (record.status === "ABSENT") {
+                        statusCell.classList.add("status-absent");
+                    }
+
+                    row.appendChild(statusCell);
+                    row.appendChild(createTableCell(record.time_marked));
+
+                    attendanceTableBody.appendChild(row);
+                });
+
+                if (displayRecords.length === 0) {
                     clearAttendanceTable();
-
-                    dateLabel.textContent =
-                        `Date: ${selectedDate} ` +
-                        `- No attendance recorded yet`;
-
-                }
-                else {
-
-                    dateLabel.textContent =
-                        `Date: ${selectedDate}`;
+                    dateLabel.textContent = `Date: ${selectedDate} - No attendance recorded yet`;
+                } else {
+                    dateLabel.textContent = `Date: ${selectedDate}`;
                 }
 
-            }
-            catch (
-                error
-            ) {
-
-                showDialog(
-                    "Database Error",
-                    "Could not load attendance data:\n\n" +
-                    (
-                        error &&
-                        error.message
-                            ? error.message
-                            : String(error)
-                    )
-                );
-
-                console.error(
-                    "ATTENDANCE DISPLAY ERROR:"
-                );
-
-                console.error(
-                    error
-                );
+            } catch (error) {
+                showDialog("Database Error", "Could not load attendance data:\n\n" + (error && error.message ? error.message : String(error)));
+                console.error("ATTENDANCE DISPLAY ERROR:", error);
             }
         }
 
 
         /* =========================================================
-           FETCH BUTTON
+           EVENT LISTENERS & CLOCK
            ========================================================= */
 
         async function onDateChanged() {
+            const selectedDate = datePicker.value;
+            if (!selectedDate) return;
 
-            const selectedDate =
-                datePicker.value;
-
-            if (
-                !selectedDate
-            ) {
-
-                return;
-            }
-
-            fetchButton.disabled =
-                true;
-
+            fetchButton.disabled = true;
             try {
-
-                await loadAttendanceForDate(
-                    selectedDate
-                );
-
-            }
-            finally {
-
-                fetchButton.disabled =
-                    false;
+                await loadAttendanceForDate(selectedDate);
+            } finally {
+                fetchButton.disabled = false;
             }
         }
 
-
-        fetchButton.addEventListener(
-            "click",
-            onDateChanged
-        );
-
-
-        /* =========================================================
-           BACK TO ADMIN
-           ========================================================= */
+        fetchButton.addEventListener("click", onDateChanged);
 
         function returnToAdmin() {
-
-            window.location.href =
-                "admin_panel.html";
+            window.location.href = "admin_panel.html";
         }
 
-
-        backButton.addEventListener(
-            "click",
-            returnToAdmin
-        );
+        backButton.addEventListener("click", returnToAdmin);
 
 
         /* =========================================================
-           DIALOG
+           DIALOG MANAGEMENT
            ========================================================= */
 
-        function showDialog(
-            title,
-            message
-        ) {
-
-            document.getElementById(
-                "dialogTitle"
-            ).textContent =
-                title;
-
-            document.getElementById(
-                "dialogContent"
-            ).textContent =
-                message;
-
-            document.getElementById(
-                "dialogOverlay"
-            )
-            .classList.add(
-                "visible"
-            );
+        function showDialog(title, message) {
+            document.getElementById("dialogTitle").textContent = title;
+            document.getElementById("dialogContent").textContent = message;
+            document.getElementById("dialogOverlay").classList.add("visible");
         }
-
 
         function closeDialog() {
-
-            document.getElementById(
-                "dialogOverlay"
-            )
-            .classList.remove(
-                "visible"
-            );
+            document.getElementById("dialogOverlay").classList.remove("visible");
         }
 
-
-        document.getElementById(
-            "dialogButton"
-        )
-        .addEventListener(
-            "click",
-            closeDialog
-        );
-
-
-        document.getElementById(
-            "dialogOverlay"
-        )
-        .addEventListener(
-            "click",
-            function(event) {
-
-                if (
-                    event.target ===
-                    event.currentTarget
-                ) {
-
-                    closeDialog();
-                }
-
+        document.getElementById("dialogButton").addEventListener("click", closeDialog);
+        document.getElementById("dialogOverlay").addEventListener("click", function(event) {
+            if (event.target === event.currentTarget) {
+                closeDialog();
             }
-        );
+        });
 
 
         /* =========================================================
-           LIVE CLOCK
+           INITIALIZATION
            ========================================================= */
 
-        setInterval(
-            updateTimeDisplay,
-            1000
-        );
-
+        setInterval(updateTimeDisplay, 1000);
         updateTimeDisplay();
-
-
-        /* =========================================================
-           INITIAL DATA LOAD
-           ========================================================= */
-
-        loadAttendanceForDate(
-            todayNepal
-        );
+        loadAttendanceForDate(todayNepal);
 
     </script>
 
