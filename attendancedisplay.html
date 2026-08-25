@@ -792,6 +792,8 @@
          * selected_class="Class 6"
          * selected_section="Section A"
          */
+        const API_BASE_URL = window.location.origin;
+        const API_BASE = API_BASE_URL;
         const DEFAULT_CLASS = "Class 6";
         const DEFAULT_SECTION = "Section A";
 
@@ -1154,7 +1156,7 @@
            Therefore this HTML provides two supported bridge modes:
 
            1. Existing web backend:
-                 Set API_BASE_URL.
+                 Set API_BASE.
 
            2. Direct Supabase REST:
                  Set SUPABASE_URL and SUPABASE_ANON_KEY.
