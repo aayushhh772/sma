@@ -1162,6 +1162,9 @@
            The database.py credentials/connection are NOT guessed
            or replaced with invented values.
         */
+
+        const API_BASE = window.location.origin;
+
         const SUPABASE_URL = "https://bnhpestcxuisikkbhwkc.supabase.co";
 
         const SUPABASE_ANON_KEY = "sb_publishable_LjCEE0ik3tcJBPpPqcESPw_31ImMTle";
@@ -1181,15 +1184,15 @@
              * A server-side API can preserve the existing
              * database.py architecture.
              */
-            if (API_BASE_URL) {
+            if (API_BASE) {
 
                 const separator =
-                    API_BASE_URL.includes("?")
+                    API_BASE.includes("?")
                         ? "&"
                         : "?";
 
                 const url =
-                    `${API_BASE_URL}${separator}` +
+                    `${API_BASE}${separator}` +
                     `table=${encodeURIComponent(table)}` +
                     `query=${encodeURIComponent(
                         JSON.stringify(query)
@@ -1282,7 +1285,7 @@
             throw new Error(
                 "No database backend is configured. " +
                 "Connect the existing database.py logic " +
-                "through API_BASE_URL or provide the " +
+                "through API_BASE or provide the " +
                 "Supabase REST configuration."
             );
         }
